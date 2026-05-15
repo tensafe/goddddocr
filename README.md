@@ -66,12 +66,27 @@ Endpoints:
   "image": "base64-encoded-image",
   "png_fix": false,
   "charset_range": "0123456789abcdefghijklmnopqrstuvwxyz",
-  "confidence": true
+  "confidence": true,
+  "probability": false
 }
 ```
 
 `charset_range` may be a number, a string, or a string array. The response keeps
 `result` as the recognized text and includes `confidence` only when requested.
+Set `probability` to `true` to include a Python-compatible full probability
+matrix:
+
+```json
+{
+  "result": "3n3d",
+  "probability": {
+    "text": "3n3d",
+    "charsets": ["", "0", "1"],
+    "probability": [[0.01, 0.02, 0.97]],
+    "confidence": 0.97
+  }
+}
+```
 
 ## ONNX Runtime
 

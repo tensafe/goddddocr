@@ -100,13 +100,15 @@ type ocrRequest struct {
 	PNGFix       *bool  `json:"png_fix,omitempty"`
 	CharsetRange any    `json:"charset_range,omitempty"`
 	Confidence   bool   `json:"confidence,omitempty"`
+	Probability  bool   `json:"probability,omitempty"`
 }
 
 type ocrResponse struct {
-	Result           string   `json:"result"`
-	ProcessingTimeMS float64  `json:"processing_time_ms"`
-	RequestID        string   `json:"request_id,omitempty"`
-	Confidence       *float64 `json:"confidence,omitempty"`
+	Result           string             `json:"result"`
+	ProcessingTimeMS float64            `json:"processing_time_ms"`
+	RequestID        string             `json:"request_id,omitempty"`
+	Confidence       *float64           `json:"confidence,omitempty"`
+	Probability      *ProbabilityMatrix `json:"probability,omitempty"`
 }
 
 func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +150,7 @@ func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
 	result, err := s.ocr.ClassifyBytesDetailed(data, &ClassifyOptions{
 		PNGFix:       req.PNGFix,
 		CharsetRange: charsetRange,
+		Probability:  req.Probability,
 	})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "ocr_failed", err.Error())
@@ -161,6 +164,9 @@ func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Confidence {
 		resp.Confidence = &result.Confidence
+	}
+	if req.Probability {
+		resp.Probability = result.Probability
 	}
 	writeJSON(w, r, http.StatusOK, resp)
 }
@@ -210,11 +216,17 @@ func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_confidence", "confidence must be a boolean")
 		return
 	}
+	probability, err := parseOptionalBool(r.FormValue("probability"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_probability", "probability must be a boolean")
+		return
+	}
 
 	start := time.Now()
 	result, err := s.ocr.ClassifyBytesDetailed(data, &ClassifyOptions{
 		PNGFix:       pngFix,
 		CharsetRange: charsetRange,
+		Probability:  probability,
 	})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "ocr_failed", err.Error())
@@ -228,6 +240,9 @@ func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
 	}
 	if confidence {
 		resp.Confidence = &result.Confidence
+	}
+	if probability {
+		resp.Probability = result.Probability
 	}
 	writeJSON(w, r, http.StatusOK, resp)
 }

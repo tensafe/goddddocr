@@ -21,6 +21,12 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
+			if !req.Confidence {
+				t.Fatal("expected confidence request")
+			}
+			if !req.Probability {
+				t.Fatal("expected probability request")
+			}
 			got, err := base64.StdEncoding.DecodeString(req.Image)
 			if err != nil {
 				t.Fatalf("decode image: %v", err)
@@ -29,7 +35,18 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 				t.Fatalf("image mismatch: got %q, want %q", got, image)
 			}
 			confidence := 0.99
-			writeJSON(w, r, http.StatusOK, ocrResponse{Result: "3n3d", ProcessingTimeMS: 1.25, RequestID: "req-1", Confidence: &confidence})
+			writeJSON(w, r, http.StatusOK, ocrResponse{
+				Result:           "3n3d",
+				ProcessingTimeMS: 1.25,
+				RequestID:        "req-1",
+				Confidence:       &confidence,
+				Probability: &ProbabilityMatrix{
+					Text:        "3n3d",
+					Charsets:    []string{"", "3", "n", "d"},
+					Probability: [][]float64{{0.01, 0.97, 0.01, 0.01}},
+					Confidence:  0.97,
+				},
+			})
 		default:
 			http.NotFound(w, r)
 		}
@@ -44,6 +61,7 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 	result, err := client.ClassifyBytes(context.Background(), image, &RemoteClassifyOptions{
 		CharsetRange: "3nd",
 		Confidence:   true,
+		Probability:  true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +74,9 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 	}
 	if result.Confidence <= 0 {
 		t.Fatalf("confidence not decoded: %f", result.Confidence)
+	}
+	if result.Probability == nil || result.Probability.Text != "3n3d" {
+		t.Fatalf("probability not decoded: %+v", result.Probability)
 	}
 }
 

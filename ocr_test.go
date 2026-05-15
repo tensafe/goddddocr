@@ -35,7 +35,7 @@ func TestProcessOCROutputCharsetRange(t *testing.T) {
 	}
 	valid := map[int]struct{}{0: {}, 1: {}, 3: {}}
 
-	result, err := processOCROutput(data, []int64{3, 1, 4}, charset, valid)
+	result, err := processOCROutput(data, []int64{3, 1, 4}, charset, valid, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +44,46 @@ func TestProcessOCROutputCharsetRange(t *testing.T) {
 	}
 	if result.Confidence <= 0 || result.Confidence > 1 {
 		t.Fatalf("unexpected confidence: %f", result.Confidence)
+	}
+}
+
+func TestProcessOCROutputProbability(t *testing.T) {
+	charset := []string{"", "a", "b"}
+	data := []float32{
+		0, 3, 1,
+		0, 1, 4,
+	}
+
+	result, err := processOCROutput(data, []int64{2, 3}, charset, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Text != "ab" {
+		t.Fatalf("OCR mismatch: got %q, want %q", result.Text, "ab")
+	}
+	if result.Probability == nil {
+		t.Fatal("expected probability matrix")
+	}
+	if result.Probability.Text != result.Text {
+		t.Fatalf("probability text mismatch: got %q, want %q", result.Probability.Text, result.Text)
+	}
+	if len(result.Probability.Charsets) != len(charset) {
+		t.Fatalf("charset length mismatch: got %d, want %d", len(result.Probability.Charsets), len(charset))
+	}
+	if len(result.Probability.Probability) != 2 || len(result.Probability.Probability[0]) != 3 {
+		t.Fatalf("unexpected probability shape: %+v", result.Probability.Probability)
+	}
+	for rowIdx, row := range result.Probability.Probability {
+		var sum float64
+		for _, value := range row {
+			sum += value
+		}
+		if sum < 0.999 || sum > 1.001 {
+			t.Fatalf("probability row %d does not sum to 1: %.6f", rowIdx, sum)
+		}
+	}
+	if result.Probability.Confidence <= 0 || result.Probability.Confidence > 1 {
+		t.Fatalf("unexpected probability confidence: %f", result.Probability.Confidence)
 	}
 }
 

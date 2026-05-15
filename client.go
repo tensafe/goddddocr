@@ -64,13 +64,15 @@ type RemoteClassifyOptions struct {
 	PNGFix       *bool
 	CharsetRange any
 	Confidence   bool
+	Probability  bool
 }
 
 type RemoteClassifyResult struct {
-	Result           string  `json:"result"`
-	ProcessingTimeMS float64 `json:"processing_time_ms"`
-	RequestID        string  `json:"request_id,omitempty"`
-	Confidence       float64 `json:"confidence,omitempty"`
+	Result           string             `json:"result"`
+	ProcessingTimeMS float64            `json:"processing_time_ms"`
+	RequestID        string             `json:"request_id,omitempty"`
+	Confidence       float64            `json:"confidence,omitempty"`
+	Probability      *ProbabilityMatrix `json:"probability,omitempty"`
 }
 
 type RemoteError struct {
@@ -111,6 +113,7 @@ func (c *OCRClient) ClassifyBytes(ctx context.Context, image []byte, options *Re
 		reqBody.PNGFix = options.PNGFix
 		reqBody.CharsetRange = options.CharsetRange
 		reqBody.Confidence = options.Confidence
+		reqBody.Probability = options.Probability
 	}
 
 	payload, err := json.Marshal(reqBody)

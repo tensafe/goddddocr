@@ -38,7 +38,7 @@
   - Acceptance: supports int, string, and `[]string` semantics compatible with ddddocr.
 - [x] Add probability/confidence output.
   - Acceptance: API can return text and confidence without returning a huge probability matrix by default.
-- [ ] Add optional full probability matrix output.
+- [x] Add optional full probability matrix output.
   - Acceptance: caller can opt in for debugging parity with Python.
 - [ ] Add HSV color filtering.
   - Acceptance: supports common presets such as red, blue, green, yellow, black, white, gray.
@@ -95,5 +95,5 @@
 1. Expand Python-vs-Go golden fixtures with more real captcha samples.
 2. Add `ModelBeta` golden fixtures.
 3. Verify Linux Docker build end to end.
-4. Add optional full probability matrix output.
-5. Start session pool design.
+4. Start session pool design.
+5. Add basic request metrics.
