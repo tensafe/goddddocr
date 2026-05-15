@@ -1,0 +1,17 @@
+services:
+  goddddocr:
+    build:
+      context: .
+    image: goddddocr:local
+    environment:
+      GODDDDOCR_ADDR: ":8088"
+      GODDDDOCR_MODEL: "old"
+      GODDDDOCR_MAX_IMAGE_BYTES: "8388608"
+    ports:
+      - "8088:8088"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8088/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+

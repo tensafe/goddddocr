@@ -18,6 +18,44 @@ curl -s -X POST http://127.0.0.1:8088/ocr \
   -d "{\"image\":\"$(base64 -i samples/yzm1.png)\"}"
 ```
 
+## Go Client
+
+tsplay should call the service over HTTP first, so cgo and ONNX Runtime stay
+out of the tsplay process:
+
+```go
+client := goddddocr.NewOCRClient("http://127.0.0.1:8088")
+if err := client.Ready(ctx); err != nil {
+    return err
+}
+
+result, err := client.ClassifyBytes(ctx, imageBytes, nil)
+if err != nil {
+    return err
+}
+fmt.Println(result.Result)
+```
+
+## Service Config
+
+CLI flags can be supplied directly or through environment variables:
+
+| Flag | Env | Default |
+|---|---|---|
+| `-addr` | `GODDDDOCR_ADDR` | `:8088` |
+| `-model` | `GODDDDOCR_MODEL` | `old` |
+| `-png-fix` | `GODDDDOCR_PNG_FIX` | `false` |
+| `-max-image-bytes` | `GODDDDOCR_MAX_IMAGE_BYTES` | `8388608` |
+| `-shutdown-timeout` | `GODDDDOCR_SHUTDOWN_TIMEOUT` | `10s` |
+| `-onnxruntime-lib` | `ONNXRUNTIME_SHARED_LIBRARY_PATH` | empty |
+
+Endpoints:
+
+- `GET /health`
+- `GET /ready`
+- `POST /ocr`
+- `POST /ocr/file`
+
 ## ONNX Runtime
 
 The code is portable across Windows, macOS, and Linux. The only platform-native
@@ -59,6 +97,14 @@ or install the matching cross C compiler:
 - Windows: MSYS2/mingw-w64 or build natively on Windows.
 - Linux: build natively or use a Linux cross compiler/container.
 - macOS: Xcode command line tools.
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+The container exposes `8088` and uses `/ready` for health checks.
 
 ## Status
 
