@@ -106,6 +106,22 @@ matrix:
 }
 ```
 
+## Baseline Load Test
+
+Use `ocrbench` while tuning `-workers`:
+
+```bash
+go run ./cmd/goddddocr-server -addr :8088 -workers 2
+go run ./cmd/ocrbench -url http://127.0.0.1:8088 \
+  -image samples/yzm1.png \
+  -requests 100 \
+  -concurrency 4 \
+  -expect 3n3d
+```
+
+Run the same image and request count with `-workers 1`, `2`, and `4`, then
+compare QPS, p50, p95, p99, errors, and `/metrics` output.
+
 ## ONNX Runtime
 
 The code is portable across Windows, macOS, and Linux. The only platform-native
