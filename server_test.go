@@ -31,3 +31,29 @@ func TestParseBool(t *testing.T) {
 		t.Fatal("expected parse error")
 	}
 }
+
+func TestParseCharsetRangeValue(t *testing.T) {
+	rng, err := parseCharsetRangeValue("abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rng == nil || len(rng.chars) != 3 {
+		t.Fatalf("unexpected string range: %+v", rng)
+	}
+
+	rng, err = parseCharsetRangeValue(float64(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rng == nil || rng.limit == nil || *rng.limit != 2 {
+		t.Fatalf("unexpected numeric range: %+v", rng)
+	}
+
+	rng, err = parseCharsetRangeValue([]any{"a", "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rng == nil || len(rng.chars) != 2 {
+		t.Fatalf("unexpected list range: %+v", rng)
+	}
+}

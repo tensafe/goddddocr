@@ -96,14 +96,17 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 type ocrRequest struct {
-	Image  string `json:"image"`
-	PNGFix *bool  `json:"png_fix,omitempty"`
+	Image        string `json:"image"`
+	PNGFix       *bool  `json:"png_fix,omitempty"`
+	CharsetRange any    `json:"charset_range,omitempty"`
+	Confidence   bool   `json:"confidence,omitempty"`
 }
 
 type ocrResponse struct {
-	Result           string  `json:"result"`
-	ProcessingTimeMS float64 `json:"processing_time_ms"`
-	RequestID        string  `json:"request_id,omitempty"`
+	Result           string   `json:"result"`
+	ProcessingTimeMS float64  `json:"processing_time_ms"`
+	RequestID        string   `json:"request_id,omitempty"`
+	Confidence       *float64 `json:"confidence,omitempty"`
 }
 
 func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
@@ -135,19 +138,31 @@ func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", fmt.Sprintf("image exceeds %d bytes", s.maxImageBytes))
 		return
 	}
+	charsetRange, err := parseCharsetRangeValue(req.CharsetRange)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_charset_range", err.Error())
+		return
+	}
 
 	start := time.Now()
-	result, err := s.ocr.ClassifyBytes(data, &ClassifyOptions{PNGFix: req.PNGFix})
+	result, err := s.ocr.ClassifyBytesDetailed(data, &ClassifyOptions{
+		PNGFix:       req.PNGFix,
+		CharsetRange: charsetRange,
+	})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "ocr_failed", err.Error())
 		return
 	}
 
-	writeJSON(w, r, http.StatusOK, ocrResponse{
-		Result:           result,
+	resp := ocrResponse{
+		Result:           result.Text,
 		ProcessingTimeMS: float64(time.Since(start).Microseconds()) / 1000.0,
 		RequestID:        requestIDFrom(r),
-	})
+	}
+	if req.Confidence {
+		resp.Confidence = &result.Confidence
+	}
+	writeJSON(w, r, http.StatusOK, resp)
 }
 
 func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
@@ -185,19 +200,36 @@ func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
 		}
 		pngFix = &parsed
 	}
+	charsetRange, err := parseCharsetRangeFormValue(r.FormValue("charset_range"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_charset_range", err.Error())
+		return
+	}
+	confidence, err := parseOptionalBool(r.FormValue("confidence"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_confidence", "confidence must be a boolean")
+		return
+	}
 
 	start := time.Now()
-	result, err := s.ocr.ClassifyBytes(data, &ClassifyOptions{PNGFix: pngFix})
+	result, err := s.ocr.ClassifyBytesDetailed(data, &ClassifyOptions{
+		PNGFix:       pngFix,
+		CharsetRange: charsetRange,
+	})
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "ocr_failed", err.Error())
 		return
 	}
 
-	writeJSON(w, r, http.StatusOK, ocrResponse{
-		Result:           result,
+	resp := ocrResponse{
+		Result:           result.Text,
 		ProcessingTimeMS: float64(time.Since(start).Microseconds()) / 1000.0,
 		RequestID:        requestIDFrom(r),
-	})
+	}
+	if confidence {
+		resp.Confidence = &result.Confidence
+	}
+	writeJSON(w, r, http.StatusOK, resp)
 }
 
 func decodeBase64Image(value string) ([]byte, error) {
@@ -238,6 +270,64 @@ func parseBool(value string) (bool, error) {
 		return false, nil
 	default:
 		return false, fmt.Errorf("invalid boolean %q", value)
+	}
+}
+
+func parseOptionalBool(value string) (bool, error) {
+	if strings.TrimSpace(value) == "" {
+		return false, nil
+	}
+	return parseBool(value)
+}
+
+func parseCharsetRangeFormValue(value string) (*CharsetRange, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	if parsed, err := strconv.Atoi(value); err == nil {
+		return NewCharsetRangeLimit(parsed), nil
+	}
+	if strings.HasPrefix(value, "[") {
+		var chars []string
+		if err := json.Unmarshal([]byte(value), &chars); err != nil {
+			return nil, fmt.Errorf("charset_range array must contain strings")
+		}
+		return NewCharsetRangeChars(chars), nil
+	}
+	return NewCharsetRangeString(value), nil
+}
+
+func parseCharsetRangeValue(value any) (*CharsetRange, error) {
+	if value == nil {
+		return nil, nil
+	}
+	switch v := value.(type) {
+	case float64:
+		if v < 0 || v != float64(int(v)) {
+			return nil, fmt.Errorf("charset_range number must be a non-negative integer")
+		}
+		return NewCharsetRangeLimit(int(v)), nil
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return nil, nil
+		}
+		return NewCharsetRangeString(v), nil
+	case []any:
+		if len(v) == 0 {
+			return nil, fmt.Errorf("charset_range array must not be empty")
+		}
+		chars := make([]string, 0, len(v))
+		for _, item := range v {
+			ch, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("charset_range array must contain strings")
+			}
+			chars = append(chars, ch)
+		}
+		return NewCharsetRangeChars(chars), nil
+	default:
+		return nil, fmt.Errorf("charset_range must be a number, string, or string array")
 	}
 }
 

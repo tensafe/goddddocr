@@ -28,7 +28,8 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 			if string(got) != string(image) {
 				t.Fatalf("image mismatch: got %q, want %q", got, image)
 			}
-			writeJSON(w, r, http.StatusOK, ocrResponse{Result: "3n3d", ProcessingTimeMS: 1.25, RequestID: "req-1"})
+			confidence := 0.99
+			writeJSON(w, r, http.StatusOK, ocrResponse{Result: "3n3d", ProcessingTimeMS: 1.25, RequestID: "req-1", Confidence: &confidence})
 		default:
 			http.NotFound(w, r)
 		}
@@ -40,7 +41,10 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := client.ClassifyBytes(context.Background(), image, nil)
+	result, err := client.ClassifyBytes(context.Background(), image, &RemoteClassifyOptions{
+		CharsetRange: "3nd",
+		Confidence:   true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +53,9 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 	}
 	if result.RequestID != "req-1" {
 		t.Fatalf("request id mismatch: got %q", result.RequestID)
+	}
+	if result.Confidence <= 0 {
+		t.Fatalf("confidence not decoded: %f", result.Confidence)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"math"
 	"strings"
 	"sync"
 
@@ -26,8 +27,53 @@ type Config struct {
 	PNGFix            bool
 }
 
+type CharsetRange struct {
+	limit *int
+	chars []string
+}
+
+func NewCharsetRangeLimit(maxIndex int) *CharsetRange {
+	return &CharsetRange{limit: &maxIndex}
+}
+
+func NewCharsetRangeString(chars string) *CharsetRange {
+	out := make([]string, 0, len(chars))
+	seen := map[string]struct{}{}
+	for _, r := range chars {
+		ch := string(r)
+		if _, ok := seen[ch]; ok {
+			continue
+		}
+		seen[ch] = struct{}{}
+		out = append(out, ch)
+	}
+	return &CharsetRange{chars: out}
+}
+
+func NewCharsetRangeChars(chars []string) *CharsetRange {
+	out := make([]string, 0, len(chars))
+	seen := map[string]struct{}{}
+	for _, ch := range chars {
+		if ch == "" {
+			continue
+		}
+		if _, ok := seen[ch]; ok {
+			continue
+		}
+		seen[ch] = struct{}{}
+		out = append(out, ch)
+	}
+	return &CharsetRange{chars: out}
+}
+
 type ClassifyOptions struct {
-	PNGFix *bool
+	PNGFix       *bool
+	CharsetRange *CharsetRange
+}
+
+type ClassifyResult struct {
+	Text       string  `json:"text"`
+	Confidence float64 `json:"confidence"`
 }
 
 type OCR struct {
@@ -103,16 +149,32 @@ func (o *OCR) Charset() []string {
 }
 
 func (o *OCR) ClassifyBytes(data []byte, options *ClassifyOptions) (string, error) {
+	result, err := o.ClassifyBytesDetailed(data, options)
+	if err != nil {
+		return "", err
+	}
+	return result.Text, nil
+}
+
+func (o *OCR) ClassifyBytesDetailed(data []byte, options *ClassifyOptions) (*ClassifyResult, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return "", fmt.Errorf("decode image: %w", err)
+		return nil, fmt.Errorf("decode image: %w", err)
 	}
-	return o.ClassifyImage(img, options)
+	return o.ClassifyImageDetailed(img, options)
 }
 
 func (o *OCR) ClassifyImage(img image.Image, options *ClassifyOptions) (string, error) {
+	result, err := o.ClassifyImageDetailed(img, options)
+	if err != nil {
+		return "", err
+	}
+	return result.Text, nil
+}
+
+func (o *OCR) ClassifyImageDetailed(img image.Image, options *ClassifyOptions) (*ClassifyResult, error) {
 	if o == nil || o.session == nil {
-		return "", fmt.Errorf("OCR engine is closed")
+		return nil, fmt.Errorf("OCR engine is closed")
 	}
 
 	pngFix := o.pngFix
@@ -122,12 +184,12 @@ func (o *OCR) ClassifyImage(img image.Image, options *ClassifyOptions) (string, 
 
 	inputData, width, err := preprocessOCRImage(img, pngFix)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	inputTensor, err := ort.NewTensor(ort.NewShape(1, 1, ocrTargetHeight, int64(width)), inputData)
 	if err != nil {
-		return "", fmt.Errorf("create input tensor: %w", err)
+		return nil, fmt.Errorf("create input tensor: %w", err)
 	}
 	defer inputTensor.Destroy()
 
@@ -136,75 +198,134 @@ func (o *OCR) ClassifyImage(img image.Image, options *ClassifyOptions) (string, 
 	err = o.session.Run([]ort.Value{inputTensor}, outputs)
 	o.mu.Unlock()
 	if err != nil {
-		return "", fmt.Errorf("run OCR model: %w", err)
+		return nil, fmt.Errorf("run OCR model: %w", err)
 	}
 	if outputs[0] == nil {
-		return "", fmt.Errorf("OCR model returned no output")
+		return nil, fmt.Errorf("OCR model returned no output")
 	}
 	defer outputs[0].Destroy()
 
 	outputTensor, ok := outputs[0].(*ort.Tensor[float32])
 	if !ok {
-		return "", fmt.Errorf("unexpected OCR output tensor type %T", outputs[0])
+		return nil, fmt.Errorf("unexpected OCR output tensor type %T", outputs[0])
 	}
 
-	return decodeOCRText(outputTensor.GetData(), outputTensor.GetShape(), o.chars)
+	valid, err := o.validIndices(options)
+	if err != nil {
+		return nil, err
+	}
+	return processOCROutput(outputTensor.GetData(), outputTensor.GetShape(), o.chars, valid)
 }
 
-func decodeOCRText(data []float32, shape ort.Shape, charset []string) (string, error) {
+func (o *OCR) validIndices(options *ClassifyOptions) (map[int]struct{}, error) {
+	if options == nil || options.CharsetRange == nil {
+		return nil, nil
+	}
+	spec := options.CharsetRange
+	valid := map[int]struct{}{}
+	if spec.limit != nil {
+		if *spec.limit < 0 {
+			return nil, fmt.Errorf("charset range limit must be non-negative")
+		}
+		max := *spec.limit
+		if max >= len(o.chars) {
+			max = len(o.chars) - 1
+		}
+		for idx := 0; idx <= max; idx++ {
+			valid[idx] = struct{}{}
+		}
+		valid[0] = struct{}{}
+		return valid, nil
+	}
+
+	indexByChar := make(map[string]int, len(o.chars))
+	for idx, ch := range o.chars {
+		indexByChar[ch] = idx
+	}
+	for _, ch := range spec.chars {
+		if idx, ok := indexByChar[ch]; ok {
+			valid[idx] = struct{}{}
+		}
+	}
+	valid[0] = struct{}{}
+	return valid, nil
+}
+
+func processOCROutput(data []float32, shape ort.Shape, charset []string, valid map[int]struct{}) (*ClassifyResult, error) {
 	if len(shape) == 0 {
-		return "", fmt.Errorf("empty OCR output shape")
+		return nil, fmt.Errorf("empty OCR output shape")
 	}
 
 	var indices []int
+	var confidences []float64
 	switch len(shape) {
 	case 3:
 		d0, d1, d2 := int(shape[0]), int(shape[1]), int(shape[2])
 		if d0 <= 0 || d1 <= 0 || d2 <= 0 {
-			return "", fmt.Errorf("invalid OCR output shape %v", shape)
+			return nil, fmt.Errorf("invalid OCR output shape %v", shape)
 		}
 		if d1 == 1 {
 			indices = make([]int, d0)
+			confidences = make([]float64, d0)
 			for t := 0; t < d0; t++ {
-				indices[t] = argmax(data[t*d1*d2 : t*d1*d2+d2])
+				row := data[t*d1*d2 : t*d1*d2+d2]
+				indices[t] = argmax(row)
+				confidences[t] = maxSoftmax(row)
 			}
 		} else if d0 == 1 {
 			indices = make([]int, d1)
+			confidences = make([]float64, d1)
 			for t := 0; t < d1; t++ {
 				offset := t * d2
-				indices[t] = argmax(data[offset : offset+d2])
+				row := data[offset : offset+d2]
+				indices[t] = argmax(row)
+				confidences[t] = maxSoftmax(row)
 			}
 		} else {
 			indices = make([]int, d1)
+			confidences = make([]float64, d1)
 			for t := 0; t < d1; t++ {
 				offset := t * d2
-				indices[t] = argmax(data[offset : offset+d2])
+				row := data[offset : offset+d2]
+				indices[t] = argmax(row)
+				confidences[t] = maxSoftmax(row)
 			}
 		}
 	case 2:
 		rows, cols := int(shape[0]), int(shape[1])
 		if rows <= 0 || cols <= 0 {
-			return "", fmt.Errorf("invalid OCR output shape %v", shape)
+			return nil, fmt.Errorf("invalid OCR output shape %v", shape)
 		}
 		indices = make([]int, rows)
+		confidences = make([]float64, rows)
 		for row := 0; row < rows; row++ {
 			offset := row * cols
-			indices[row] = argmax(data[offset : offset+cols])
+			values := data[offset : offset+cols]
+			indices[row] = argmax(values)
+			confidences[row] = maxSoftmax(values)
 		}
 	default:
 		idx := argmax(data)
 		indices = []int{idx}
+		confidences = []float64{maxSoftmax(data)}
 	}
 
 	var text strings.Builder
 	prev := -1
 	for _, idx := range indices {
+		if _, restricted := valid[idx]; valid != nil && !restricted {
+			prev = idx
+			continue
+		}
 		if idx != prev && idx != 0 && idx >= 0 && idx < len(charset) {
 			text.WriteString(charset[idx])
 		}
 		prev = idx
 	}
-	return text.String(), nil
+	return &ClassifyResult{
+		Text:       text.String(),
+		Confidence: mean(confidences),
+	}, nil
 }
 
 func argmax(values []float32) int {
@@ -220,4 +341,35 @@ func argmax(values []float32) int {
 		}
 	}
 	return bestIndex
+}
+
+func maxSoftmax(values []float32) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	maxValue := values[0]
+	for _, value := range values[1:] {
+		if value > maxValue {
+			maxValue = value
+		}
+	}
+	var sum float64
+	for _, value := range values {
+		sum += math.Exp(float64(value - maxValue))
+	}
+	if sum == 0 {
+		return 0
+	}
+	return 1 / sum
+}
+
+func mean(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	var total float64
+	for _, value := range values {
+		total += value
+	}
+	return total / float64(len(values))
 }

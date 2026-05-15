@@ -15,7 +15,7 @@ go run ./cmd/goddddocr-server -addr :8088
 curl -s http://127.0.0.1:8088/health
 curl -s -X POST http://127.0.0.1:8088/ocr \
   -H 'content-type: application/json' \
-  -d "{\"image\":\"$(base64 -i samples/yzm1.png)\"}"
+  -d "{\"image\":\"$(base64 -i samples/yzm1.png)\",\"confidence\":true}"
 ```
 
 ## Go Client
@@ -29,7 +29,10 @@ if err := client.Ready(ctx); err != nil {
     return err
 }
 
-result, err := client.ClassifyBytes(ctx, imageBytes, nil)
+result, err := client.ClassifyBytes(ctx, imageBytes, &goddddocr.RemoteClassifyOptions{
+    CharsetRange: "0123456789abcdefghijklmnopqrstuvwxyz",
+    Confidence: true,
+})
 if err != nil {
     return err
 }
@@ -55,6 +58,20 @@ Endpoints:
 - `GET /ready`
 - `POST /ocr`
 - `POST /ocr/file`
+
+`POST /ocr` accepts:
+
+```json
+{
+  "image": "base64-encoded-image",
+  "png_fix": false,
+  "charset_range": "0123456789abcdefghijklmnopqrstuvwxyz",
+  "confidence": true
+}
+```
+
+`charset_range` may be a number, a string, or a string array. The response keeps
+`result` as the recognized text and includes `confidence` only when requested.
 
 ## ONNX Runtime
 

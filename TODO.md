@@ -34,9 +34,9 @@
   - Acceptance: model can be selected with config or `-model`.
 - [x] Support PNG alpha background fix.
   - Acceptance: `PNGFix` and `png_fix` request field are respected.
-- [ ] Add charset range filtering.
+- [x] Add charset range filtering.
   - Acceptance: supports int, string, and `[]string` semantics compatible with ddddocr.
-- [ ] Add probability/confidence output.
+- [x] Add probability/confidence output.
   - Acceptance: API can return text and confidence without returning a huge probability matrix by default.
 - [ ] Add optional full probability matrix output.
   - Acceptance: caller can opt in for debugging parity with Python.
@@ -94,7 +94,6 @@
 
 1. Add tsplay-side adapter/example.
 2. Build Python-vs-Go golden fixtures.
-3. Add charset range filtering.
-4. Add confidence output.
-5. Verify Linux Docker build end to end.
-
+3. Verify Linux Docker build end to end.
+4. Add optional full probability matrix output.
+5. Start session pool design.

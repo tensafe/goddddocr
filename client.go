@@ -61,13 +61,16 @@ func NewOCRClient(baseURL string, options ...OCRClientOption) *OCRClient {
 }
 
 type RemoteClassifyOptions struct {
-	PNGFix *bool
+	PNGFix       *bool
+	CharsetRange any
+	Confidence   bool
 }
 
 type RemoteClassifyResult struct {
 	Result           string  `json:"result"`
 	ProcessingTimeMS float64 `json:"processing_time_ms"`
 	RequestID        string  `json:"request_id,omitempty"`
+	Confidence       float64 `json:"confidence,omitempty"`
 }
 
 type RemoteError struct {
@@ -106,6 +109,8 @@ func (c *OCRClient) ClassifyBytes(ctx context.Context, image []byte, options *Re
 	}
 	if options != nil {
 		reqBody.PNGFix = options.PNGFix
+		reqBody.CharsetRange = options.CharsetRange
+		reqBody.Confidence = options.Confidence
 	}
 
 	payload, err := json.Marshal(reqBody)
