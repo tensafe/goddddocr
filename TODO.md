@@ -12,14 +12,14 @@
   - Acceptance: `GODDDDOCR_ADDR`, `GODDDDOCR_MODEL`, `GODDDDOCR_MAX_IMAGE_BYTES`, and `ONNXRUNTIME_SHARED_LIBRARY_PATH` work.
 - [x] Add reusable Go HTTP client for tsplay.
   - Acceptance: caller can use `NewOCRClient(baseURL).ClassifyBytes(ctx, data, nil)`.
-- [ ] Add a small tsplay-side adapter/example.
+- [x] Add a small tsplay-side adapter/example.
   - Acceptance: tsplay can call goddddocr through a configurable base URL and timeout.
 
 ## P1: OCR Quality Alignment
 
-- [ ] Build golden-test dataset against Python ddddocr.
+- [x] Build initial golden-test dataset against Python ddddocr.
   - Acceptance: Python output fixtures exist for representative image samples.
-- [ ] Add batch comparison tests.
+- [x] Add batch comparison tests.
   - Acceptance: Go OCR output is compared against Python fixtures in CI/local tests.
 - [ ] Investigate preprocessing mismatches.
   - Acceptance: differences from PIL resize/grayscale/alpha handling are documented or fixed.
@@ -92,8 +92,8 @@
 
 ## Recommended Next Batch
 
-1. Add tsplay-side adapter/example.
-2. Build Python-vs-Go golden fixtures.
+1. Expand Python-vs-Go golden fixtures with more real captcha samples.
+2. Add `ModelBeta` golden fixtures.
 3. Verify Linux Docker build end to end.
 4. Add optional full probability matrix output.
 5. Start session pool design.

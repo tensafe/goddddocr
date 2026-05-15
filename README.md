@@ -123,6 +123,23 @@ docker compose up --build
 
 The container exposes `8088` and uses `/ready` for health checks.
 
+## Golden OCR Fixtures
+
+`fixtures/ocr_golden.json` records Python ddddocr outputs for sample images and
+keeps the Go port honest as preprocessing and model options evolve. These
+fixtures are test data only; the library and service still run without Python.
+
+```bash
+go test . -run TestGoldenOCRFixtures
+go test ./...
+```
+
+Each fixture can set `model`, `charset_range`, `png_fix`, and
+`min_confidence`. Add new representative captcha images under `samples/` or an
+ignored local sample directory, record the Python ddddocr output in
+`python_ddddocr`, and keep `expected` equal to that value unless the fixture is
+documenting an intentional compatibility difference.
+
 ## Status
 
 - OCR classification: implemented.

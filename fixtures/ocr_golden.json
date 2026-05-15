@@ -1,0 +1,12 @@
+[
+  {
+    "name": "upstream_yzm1_old",
+    "image": "samples/yzm1.png",
+    "model": "old",
+    "python_ddddocr": "3n3d",
+    "expected": "3n3d",
+    "charset_range": "0123456789abcdefghijklmnopqrstuvwxyz",
+    "min_confidence": 0.9,
+    "source": "ddddocr upstream samples/yzm1.png"
+  }
+]
