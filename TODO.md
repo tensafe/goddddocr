@@ -66,7 +66,7 @@
 
 ## P4: Service Performance And Operations
 
-- [ ] Add request metrics.
+- [x] Add request metrics.
   - Acceptance: expose request count, latency, and error count.
 - [ ] Add configurable concurrency/session pool.
   - Acceptance: `-workers=N` creates N OCR sessions for parallel inference.
@@ -96,4 +96,4 @@
 2. Add `ModelBeta` golden fixtures.
 3. Verify Linux Docker build end to end.
 4. Start session pool design.
-5. Add basic request metrics.
+5. Run baseline load test.

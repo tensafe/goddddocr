@@ -56,6 +56,7 @@ Endpoints:
 
 - `GET /health`
 - `GET /ready`
+- `GET /metrics`
 - `POST /ocr`
 - `POST /ocr/file`
 
@@ -85,6 +86,19 @@ matrix:
     "probability": [[0.01, 0.02, 0.97]],
     "confidence": 0.97
   }
+}
+```
+
+`GET /metrics` returns service counters and latency aggregates as JSON:
+
+```json
+{
+  "total_requests": 42,
+  "completed_requests": 42,
+  "error_requests": 1,
+  "status_codes": {"200": 41, "400": 1},
+  "average_latency_ms": 8.4,
+  "max_latency_ms": 31.2
 }
 ```
 

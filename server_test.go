@@ -2,6 +2,9 @@ package goddddocr
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -55,5 +58,52 @@ func TestParseCharsetRangeValue(t *testing.T) {
 	}
 	if rng == nil || len(rng.chars) != 2 {
 		t.Fatalf("unexpected list range: %+v", rng)
+	}
+}
+
+func TestServerMetricsEndpoint(t *testing.T) {
+	s := NewServer(nil, WithLogger(nil))
+	server := httptest.NewServer(s.Handler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/ready")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("ready status = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+
+	resp, err = http.Get(server.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("metrics status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var snapshot ServerMetricsSnapshot
+	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.TotalRequests != 1 {
+		t.Fatalf("total_requests = %d, want 1", snapshot.TotalRequests)
+	}
+	if snapshot.CompletedRequests != 1 {
+		t.Fatalf("completed_requests = %d, want 1", snapshot.CompletedRequests)
+	}
+	if snapshot.ErrorRequests != 1 {
+		t.Fatalf("error_requests = %d, want 1", snapshot.ErrorRequests)
+	}
+	if snapshot.StatusCodes["503"] != 1 {
+		t.Fatalf("status_codes = %#v, want 503 count 1", snapshot.StatusCodes)
+	}
+	if snapshot.InFlightRequests != 0 {
+		t.Fatalf("in_flight_requests = %d, want 0", snapshot.InFlightRequests)
+	}
+	if snapshot.StartedAt == "" {
+		t.Fatal("started_at is empty")
 	}
 }

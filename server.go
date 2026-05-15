@@ -24,6 +24,7 @@ type Server struct {
 	maxBodyBytes  int64
 	logger        *log.Logger
 	requestSeq    atomic.Uint64
+	metrics       *serverMetrics
 }
 
 type ServerOption func(*Server)
@@ -60,6 +61,7 @@ func NewServer(ocr *OCR, options ...ServerOption) *Server {
 		maxImageBytes: DefaultMaxImageBytes,
 		maxBodyBytes:  DefaultMaxBodyBytes,
 		logger:        log.Default(),
+		metrics:       newServerMetrics(time.Now()),
 	}
 	for _, option := range options {
 		option(s)
@@ -71,6 +73,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /ready", s.handleReady)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("POST /ocr", s.handleOCR)
 	mux.HandleFunc("POST /ocr/file", s.handleOCRFile)
 	return s.accessLog(s.requestID(mux))
@@ -93,6 +96,17 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		"status": "ready",
 		"model":  s.ocr.Model(),
 	})
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, r, http.StatusOK, s.Metrics())
+}
+
+func (s *Server) Metrics() ServerMetricsSnapshot {
+	if s == nil || s.metrics == nil {
+		return ServerMetricsSnapshot{}
+	}
+	return s.metrics.snapshot(time.Now())
 }
 
 type ocrRequest struct {
@@ -389,17 +403,27 @@ func (s *Server) accessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(recorder, r)
-		if s.logger != nil {
-			s.logger.Printf("request_id=%s method=%s path=%s status=%d duration_ms=%.3f remote=%s",
-				requestIDFrom(r),
-				r.Method,
-				r.URL.Path,
-				recorder.status,
-				float64(time.Since(start).Microseconds())/1000.0,
-				r.RemoteAddr,
-			)
+		recordMetrics := r.URL == nil || r.URL.Path != "/metrics"
+		if recordMetrics && s.metrics != nil {
+			s.metrics.start()
 		}
+		defer func() {
+			duration := time.Since(start)
+			if recordMetrics && s.metrics != nil {
+				s.metrics.finish(recorder.status, duration)
+			}
+			if s.logger != nil {
+				s.logger.Printf("request_id=%s method=%s path=%s status=%d duration_ms=%.3f remote=%s",
+					requestIDFrom(r),
+					r.Method,
+					r.URL.Path,
+					recorder.status,
+					float64(duration.Microseconds())/1000.0,
+					r.RemoteAddr,
+				)
+			}
+		}()
+		next.ServeHTTP(recorder, r)
 	})
 }
 
