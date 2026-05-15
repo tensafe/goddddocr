@@ -19,7 +19,7 @@ const (
 )
 
 type Server struct {
-	ocr           *OCR
+	ocr           OCREngine
 	maxImageBytes int64
 	maxBodyBytes  int64
 	logger        *log.Logger
@@ -55,7 +55,7 @@ func WithLogger(logger *log.Logger) ServerOption {
 	}
 }
 
-func NewServer(ocr *OCR, options ...ServerOption) *Server {
+func NewServer(ocr OCREngine, options ...ServerOption) *Server {
 	s := &Server{
 		ocr:           ocr,
 		maxImageBytes: DefaultMaxImageBytes,
@@ -80,11 +80,14 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, r, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"status": "ok",
-		"model":  s.ocr.Model(),
 		"time":   time.Now().Format(time.RFC3339),
-	})
+	}
+	if s.ocr != nil {
+		payload["model"] = s.ocr.Model()
+	}
+	writeJSON(w, r, http.StatusOK, payload)
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +129,11 @@ type ocrResponse struct {
 }
 
 func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
+	if s.ocr == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "OCR engine is not initialized")
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
 	defer r.Body.Close()
 
@@ -186,6 +194,11 @@ func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
+	if s.ocr == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "OCR engine is not initialized")
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
 	defer r.Body.Close()
 

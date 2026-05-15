@@ -68,7 +68,7 @@
 
 - [x] Add request metrics.
   - Acceptance: expose request count, latency, and error count.
-- [ ] Add configurable concurrency/session pool.
+- [x] Add configurable concurrency/session pool.
   - Acceptance: `-workers=N` creates N OCR sessions for parallel inference.
 - [ ] Run baseline load test.
   - Acceptance: document QPS, p50/p95 latency, and memory on a standard machine.
@@ -95,5 +95,5 @@
 1. Expand Python-vs-Go golden fixtures with more real captcha samples.
 2. Add `ModelBeta` golden fixtures.
 3. Verify Linux Docker build end to end.
-4. Start session pool design.
-5. Run baseline load test.
+4. Run baseline load test.
+5. Add structured logging option.

@@ -107,3 +107,25 @@ func TestServerMetricsEndpoint(t *testing.T) {
 		t.Fatal("started_at is empty")
 	}
 }
+
+func TestServerHealthWithoutEngine(t *testing.T) {
+	s := NewServer(nil, WithLogger(nil))
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("health status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(recorder.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("status = %#v", body["status"])
+	}
+	if _, ok := body["model"]; ok {
+		t.Fatalf("model should be omitted without engine: %#v", body["model"])
+	}
+}

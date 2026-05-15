@@ -27,6 +27,11 @@ type Config struct {
 	PNGFix            bool
 }
 
+type OCREngine interface {
+	Model() Model
+	ClassifyBytesDetailed(data []byte, options *ClassifyOptions) (*ClassifyResult, error)
+}
+
 type CharsetRange struct {
 	limit *int
 	chars []string
