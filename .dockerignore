@@ -1,0 +1,9 @@
+.git
+*.log
+goddddocr-server
+third_party/onnxruntime/linux_amd64
+third_party/onnxruntime/windows_amd64
+third_party/onnxruntime/windows_arm64
+third_party/onnxruntime/darwin_arm64
+third_party/onnxruntime/darwin_amd64
+third_party/onnxruntime/linux_arm64
