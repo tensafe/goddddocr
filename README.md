@@ -347,6 +347,12 @@ The command also accepts `-png-fix`, `-color-filter-colors`, and
 When you have a Python/PIL reference export, compare it directly:
 
 ```bash
+python3 scripts/python_preprocess_reference.py \
+  -image samples/yzm1.png \
+  -out /tmp/python-preprocess.png \
+  -matrix-csv /tmp/python-preprocess.csv \
+  -json /tmp/python-preprocess.json
+
 go run ./cmd/ocrprep \
   -image samples/yzm1.png \
   -compare-csv /tmp/python-preprocess.csv \
@@ -358,6 +364,9 @@ exact-match, differing pixel count, max absolute difference, mean absolute
 difference, RMSE, and the reference SHA-256. The optional `-diff-png` output
 is black where pixels match, red where Go preprocessing is darker than the
 reference, and blue where Go preprocessing is brighter.
+`scripts/python_preprocess_reference.py` is a development-only helper for
+exporting Python/Pillow reference files; the Go module, CLI, and HTTP service do
+not use Python at runtime.
 
 ## Status
 
