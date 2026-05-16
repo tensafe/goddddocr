@@ -49,12 +49,14 @@ CLI flags can be supplied directly or through environment variables:
 | `-model` | `GODDDDOCR_MODEL` | `old` |
 | `-png-fix` | `GODDDDOCR_PNG_FIX` | `false` |
 | `-workers` | `GODDDDOCR_WORKERS` | `1` |
+| `-log-format` | `GODDDDOCR_LOG_FORMAT` | `text` |
 | `-max-image-bytes` | `GODDDDOCR_MAX_IMAGE_BYTES` | `8388608` |
 | `-shutdown-timeout` | `GODDDDOCR_SHUTDOWN_TIMEOUT` | `10s` |
 | `-onnxruntime-lib` | `ONNXRUNTIME_SHARED_LIBRARY_PATH` | empty |
 
 `-workers=N` creates N independent OCR sessions behind the HTTP service. Start
 with `1`, then increase gradually after checking `/metrics` latency and memory.
+Use `-log-format json` for one-JSON-object-per-line service and access logs.
 
 Endpoints:
 

@@ -1,10 +1,13 @@
 package goddddocr
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -127,5 +130,53 @@ func TestServerHealthWithoutEngine(t *testing.T) {
 	}
 	if _, ok := body["model"]; ok {
 		t.Fatalf("model should be omitted without engine: %#v", body["model"])
+	}
+}
+
+func TestParseLogFormat(t *testing.T) {
+	if got, err := ParseLogFormat("json"); err != nil || got != LogFormatJSON {
+		t.Fatalf("ParseLogFormat(json) = %q, %v", got, err)
+	}
+	if got, err := ParseLogFormat(""); err != nil || got != LogFormatText {
+		t.Fatalf("ParseLogFormat(empty) = %q, %v", got, err)
+	}
+	if _, err := ParseLogFormat("xml"); err == nil {
+		t.Fatal("expected unsupported log format error")
+	}
+}
+
+func TestServerJSONAccessLog(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	s := NewServer(nil, WithLogger(logger), WithLogFormat(LogFormatJSON))
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("User-Agent", "goddddocr-test")
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	line := strings.TrimSpace(buf.String())
+	if line == "" {
+		t.Fatal("expected access log line")
+	}
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		t.Fatalf("decode access log: %v\nline=%s", err, line)
+	}
+	if entry["event"] != "http_request" {
+		t.Fatalf("event = %#v", entry["event"])
+	}
+	if entry["method"] != http.MethodGet {
+		t.Fatalf("method = %#v", entry["method"])
+	}
+	if entry["path"] != "/ready" {
+		t.Fatalf("path = %#v", entry["path"])
+	}
+	if entry["status"] != float64(http.StatusServiceUnavailable) {
+		t.Fatalf("status = %#v", entry["status"])
+	}
+	if entry["user_agent"] != "goddddocr-test" {
+		t.Fatalf("user_agent = %#v", entry["user_agent"])
 	}
 }

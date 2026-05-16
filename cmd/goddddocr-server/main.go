@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,12 +23,21 @@ func main() {
 	ortLib := flag.String("onnxruntime-lib", envString("ONNXRUNTIME_SHARED_LIBRARY_PATH", ""), "path to ONNX Runtime shared library")
 	pngFix := flag.Bool("png-fix", envBool("GODDDDOCR_PNG_FIX", false), "composite transparent PNGs over a white background")
 	workers := flag.Int("workers", envInt("GODDDDOCR_WORKERS", 1), "number of OCR sessions to keep in the worker pool")
+	logFormatValue := flag.String("log-format", envString("GODDDDOCR_LOG_FORMAT", string(goddddocr.LogFormatText)), "log format: text or json")
 	maxImageBytes := flag.Int64("max-image-bytes", envInt64("GODDDDOCR_MAX_IMAGE_BYTES", goddddocr.DefaultMaxImageBytes), "maximum decoded image size in bytes")
 	shutdownTimeout := flag.Duration("shutdown-timeout", envDuration("GODDDDOCR_SHUTDOWN_TIMEOUT", 10*time.Second), "graceful shutdown timeout")
 	flag.Parse()
 
+	logFormat, err := goddddocr.ParseLogFormat(*logFormatValue)
+	if err != nil {
+		log.Fatal(err)
+	}
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	if logFormat == goddddocr.LogFormatJSON {
+		logger = log.New(os.Stdout, "", 0)
+	}
 	if *workers <= 0 {
-		log.Fatalf("workers must be positive")
+		logger.Fatalf("workers must be positive")
 	}
 
 	ocr, err := goddddocr.NewOCRPool(goddddocr.Config{
@@ -35,7 +46,8 @@ func main() {
 		PNGFix:            *pngFix,
 	}, *workers)
 	if err != nil {
-		log.Fatalf("init OCR: %v", err)
+		logServiceEvent(logger, logFormat, "server_init_failed", map[string]any{"error": err.Error()})
+		os.Exit(1)
 	}
 	defer ocr.Close()
 
@@ -44,6 +56,8 @@ func main() {
 		Handler: goddddocr.NewServer(
 			ocr,
 			goddddocr.WithMaxImageBytes(*maxImageBytes),
+			goddddocr.WithLogger(logger),
+			goddddocr.WithLogFormat(logFormat),
 		).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -56,15 +70,54 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), *shutdownTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("server shutdown failed: %v", err)
+			logServiceEvent(logger, logFormat, "server_shutdown_failed", map[string]any{"error": err.Error()})
 		}
 	}()
 
-	log.Printf("goddddocr server listening on %s, model=%s, workers=%d", *addr, ocr.Model(), ocr.Size())
+	logServiceEvent(logger, logFormat, "server_started", map[string]any{
+		"addr":       *addr,
+		"model":      ocr.Model(),
+		"workers":    ocr.Size(),
+		"log_format": logFormat,
+	})
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+		logServiceEvent(logger, logFormat, "server_failed", map[string]any{"error": err.Error()})
+		os.Exit(1)
 	}
-	log.Printf("goddddocr server stopped")
+	logServiceEvent(logger, logFormat, "server_stopped", nil)
+}
+
+func logServiceEvent(logger *log.Logger, format goddddocr.LogFormat, event string, fields map[string]any) {
+	if logger == nil {
+		return
+	}
+	if format == goddddocr.LogFormatJSON {
+		payload := map[string]any{
+			"time":  time.Now().UTC().Format(time.RFC3339Nano),
+			"level": "info",
+			"event": event,
+		}
+		for key, value := range fields {
+			payload[key] = value
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			logger.Printf(`{"level":"error","event":"log_encode_failed","error":%q}`, err.Error())
+			return
+		}
+		logger.Print(string(data))
+		return
+	}
+	if len(fields) == 0 {
+		logger.Printf("event=%s", event)
+		return
+	}
+	parts := make([]string, 0, len(fields)+1)
+	parts = append(parts, "event="+event)
+	for key, value := range fields {
+		parts = append(parts, fmt.Sprintf("%s=%v", key, value))
+	}
+	logger.Print(strings.Join(parts, " "))
 }
 
 func envString(name string, fallback string) string {

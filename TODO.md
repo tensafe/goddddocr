@@ -76,7 +76,7 @@
   - Acceptance: document QPS, p50/p95 latency, and memory on a standard machine.
 - [ ] Reduce per-request allocations.
   - Acceptance: benchmark shows lower allocations in preprocessing/inference.
-- [ ] Add structured logging option.
+- [x] Add structured logging option.
   - Acceptance: logs can be consumed cleanly by Docker/systemd/tsplay.
 
 ## P5: Full ddddocr Migration
@@ -98,4 +98,4 @@
 2. Add `ModelBeta` golden fixtures.
 3. Verify Linux Docker build end to end.
 4. Record baseline load-test results for `workers=1/2/4`.
-5. Add structured logging option.
+5. Expand Python-vs-Go golden fixtures with more real captcha samples.

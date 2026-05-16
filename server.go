@@ -23,6 +23,7 @@ type Server struct {
 	maxImageBytes int64
 	maxBodyBytes  int64
 	logger        *log.Logger
+	logFormat     LogFormat
 	requestSeq    atomic.Uint64
 	metrics       *serverMetrics
 }
@@ -61,6 +62,7 @@ func NewServer(ocr OCREngine, options ...ServerOption) *Server {
 		maxImageBytes: DefaultMaxImageBytes,
 		maxBodyBytes:  DefaultMaxBodyBytes,
 		logger:        log.Default(),
+		logFormat:     LogFormatText,
 		metrics:       newServerMetrics(time.Now()),
 	}
 	for _, option := range options {
@@ -425,16 +427,7 @@ func (s *Server) accessLog(next http.Handler) http.Handler {
 			if recordMetrics && s.metrics != nil {
 				s.metrics.finish(recorder.status, duration)
 			}
-			if s.logger != nil {
-				s.logger.Printf("request_id=%s method=%s path=%s status=%d duration_ms=%.3f remote=%s",
-					requestIDFrom(r),
-					r.Method,
-					r.URL.Path,
-					recorder.status,
-					float64(duration.Microseconds())/1000.0,
-					r.RemoteAddr,
-				)
-			}
+			writeAccessLog(s.logger, s.logFormat, r, recorder.status, duration)
 		}()
 		next.ServeHTTP(recorder, r)
 	})
