@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/disintegration/imaging"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -216,7 +215,7 @@ func preprocessDetectionImage(img image.Image, inputSize int) ([]float32, float6
 		return nil, 0, 0, 0, fmt.Errorf("invalid resized detection dimensions %dx%d", resizedWidth, resizedHeight)
 	}
 
-	resized := imaging.Resize(img, resizedWidth, resizedHeight, imaging.Linear)
+	resized := resizeOpenCVLinear(img, resizedWidth, resizedHeight)
 	plane := inputSize * inputSize
 	data := make([]float32, 3*plane)
 	for idx := range data {
@@ -224,7 +223,7 @@ func preprocessDetectionImage(img image.Image, inputSize int) ([]float32, float6
 	}
 	for y := 0; y < resizedHeight; y++ {
 		for x := 0; x < resizedWidth; x++ {
-			c := color.NRGBAModel.Convert(resized.At(x, y)).(color.NRGBA)
+			c := resized[y*resizedWidth+x]
 			offset := y*inputSize + x
 			data[offset] = float32(c.B)
 			data[plane+offset] = float32(c.G)
@@ -232,6 +231,76 @@ func preprocessDetectionImage(img image.Image, inputSize int) ([]float32, float6
 		}
 	}
 	return data, ratio, width, height, nil
+}
+
+func resizeOpenCVLinear(img image.Image, dstWidth int, dstHeight int) []color.NRGBA {
+	bounds := img.Bounds()
+	srcWidth := bounds.Dx()
+	srcHeight := bounds.Dy()
+	out := make([]color.NRGBA, dstWidth*dstHeight)
+	if srcWidth <= 0 || srcHeight <= 0 || dstWidth <= 0 || dstHeight <= 0 {
+		return out
+	}
+
+	xOfs, xAlpha := linearResizeCoefficients(srcWidth, dstWidth)
+	yOfs, yAlpha := linearResizeCoefficients(srcHeight, dstHeight)
+	for y := 0; y < dstHeight; y++ {
+		sy := yOfs[y]
+		ay := yAlpha[y]
+		for x := 0; x < dstWidth; x++ {
+			sx := xOfs[x]
+			ax := xAlpha[x]
+			c00 := color.NRGBAModel.Convert(img.At(bounds.Min.X+sx, bounds.Min.Y+sy)).(color.NRGBA)
+			c01 := color.NRGBAModel.Convert(img.At(bounds.Min.X+minInt(sx+1, srcWidth-1), bounds.Min.Y+sy)).(color.NRGBA)
+			c10 := color.NRGBAModel.Convert(img.At(bounds.Min.X+sx, bounds.Min.Y+minInt(sy+1, srcHeight-1))).(color.NRGBA)
+			c11 := color.NRGBAModel.Convert(img.At(bounds.Min.X+minInt(sx+1, srcWidth-1), bounds.Min.Y+minInt(sy+1, srcHeight-1))).(color.NRGBA)
+			out[y*dstWidth+x] = color.NRGBA{
+				R: interpolateUint8(c00.R, c01.R, c10.R, c11.R, ax, ay),
+				G: interpolateUint8(c00.G, c01.G, c10.G, c11.G, ax, ay),
+				B: interpolateUint8(c00.B, c01.B, c10.B, c11.B, ax, ay),
+				A: interpolateUint8(c00.A, c01.A, c10.A, c11.A, ax, ay),
+			}
+		}
+	}
+	return out
+}
+
+func linearResizeCoefficients(srcSize int, dstSize int) ([]int, []float64) {
+	ofs := make([]int, dstSize)
+	alpha := make([]float64, dstSize)
+	if srcSize <= 1 {
+		return ofs, alpha
+	}
+	scale := float64(srcSize) / float64(dstSize)
+	for dst := 0; dst < dstSize; dst++ {
+		src := (float64(dst)+0.5)*scale - 0.5
+		idx := int(math.Floor(src))
+		weight := src - float64(idx)
+		if idx < 0 {
+			idx = 0
+			weight = 0
+		}
+		if idx >= srcSize-1 {
+			idx = srcSize - 2
+			weight = 1
+		}
+		ofs[dst] = idx
+		alpha[dst] = weight
+	}
+	return ofs, alpha
+}
+
+func interpolateUint8(c00 uint8, c01 uint8, c10 uint8, c11 uint8, ax float64, ay float64) uint8 {
+	top := float64(c00)*(1-ax) + float64(c01)*ax
+	bottom := float64(c10)*(1-ax) + float64(c11)*ax
+	value := top*(1-ay) + bottom*ay
+	if value <= 0 {
+		return 0
+	}
+	if value >= 255 {
+		return 255
+	}
+	return uint8(math.Round(value))
 }
 
 type detectionCandidate struct {

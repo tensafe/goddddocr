@@ -446,6 +446,39 @@ ignored local sample directory, record the Python ddddocr output in
 documenting an intentional compatibility difference. If Python tooling is not
 available yet, `expected` may still be used as a Go model regression baseline.
 
+## Golden Detection And Slide Fixtures
+
+`fixtures/detection_golden.json` and `fixtures/slide_golden.json` cover the
+non-OCR ddddocr features. Detection fixtures pin expected bounding boxes and
+minimum scores. Slide fixtures pin `target`, `target_x`, `target_y`, and optional
+confidence thresholds for comparison and match modes.
+
+```bash
+go test . -run 'TestGolden(Detection|Slide)Fixtures'
+```
+
+Use the development helper to refresh references from Python ddddocr when the
+Python dependencies are available:
+
+```bash
+PYTHONPATH=/path/to/ddddocr \
+  python3 scripts/python_feature_reference.py \
+  -mode det \
+  -image samples/yzm2.jpeg \
+  -out /tmp/python-detection-reference.json
+
+PYTHONPATH=/path/to/ddddocr \
+  python3 scripts/python_feature_reference.py \
+  -mode slide-match \
+  -target /path/to/target.png \
+  -background /path/to/background.png \
+  -simple-target \
+  -out /tmp/python-slide-reference.json
+```
+
+The helper is development-only; Go tests consume committed JSON fixtures and do
+not import Python.
+
 ## Local Sample Accuracy
 
 Use `ocreval` for private or real-world captcha samples that should not be

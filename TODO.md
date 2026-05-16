@@ -121,11 +121,17 @@
   - Acceptance: `/slide_comparison` and `/slide-comparison` are documented and tested.
 - [x] Add HTTP endpoint for slide match.
   - Acceptance: API shape is documented and tested.
+- [x] Add detection and slide golden regression fixtures.
+  - Acceptance: committed fixtures catch det/slide coordinate regressions in `go test`.
+- [x] Refresh committed det and synthetic slide fixtures from Python ddddocr.
+  - Acceptance: `python_ddddocr` fields are generated from Python ddddocr for current committed fixtures.
+- [ ] Add real slide captcha Python golden fixtures.
+  - Acceptance: `python_ddddocr` fields cover representative real slide comparison and match samples.
 
 ## Recommended Next Batch
 
-1. Add detection golden fixtures against Python ddddocr.
-2. Add Python golden fixtures for slide comparison and slide match.
-3. Tune edge-based slide match against real captcha samples.
-4. Document tsplay flow usage for `/det`, `/slide_comparison`, and `/slide_match`.
+1. Tune edge-based slide match against real captcha samples.
+2. Document tsplay flow usage for `/det`, `/slide_comparison`, and `/slide_match`.
+3. Add ignored private fixture workflow for real slide captcha samples.
+4. Decide whether to expose detection score threshold tuning in tsplay config.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.

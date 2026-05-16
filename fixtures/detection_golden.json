@@ -1,0 +1,19 @@
+[
+  {
+    "name": "upstream_yzm2_det",
+    "image": "samples/yzm2.jpeg",
+    "expected": [
+      [55, 344, 90, 378],
+      [26, 345, 58, 379],
+      [0, 345, 29, 377]
+    ],
+    "python_ddddocr": [
+      [55, 344, 90, 378],
+      [26, 345, 58, 379],
+      [0, 345, 29, 377]
+    ],
+    "min_scores": [0.86, 0.84, 0.84],
+    "max_coordinate_delta": 2,
+    "source": "ddddocr upstream samples/yzm2.jpeg; generated with Python ddddocr"
+  }
+]

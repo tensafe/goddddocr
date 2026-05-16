@@ -1,0 +1,30 @@
+[
+  {
+    "name": "synthetic_slide_comparison_gap",
+    "mode": "comparison",
+    "case": "synthetic_comparison",
+    "expected": [51, 32],
+    "python_ddddocr": [51, 32],
+    "source": "synthetic OpenCV-compatible diff/threshold/morphology case; generated with Python ddddocr"
+  },
+  {
+    "name": "synthetic_slide_match_simple",
+    "mode": "match",
+    "case": "synthetic_match",
+    "simple_target": true,
+    "expected": [73, 37],
+    "python_ddddocr": [73, 37],
+    "min_confidence": 0.99,
+    "source": "synthetic template matching case; generated with Python ddddocr"
+  },
+  {
+    "name": "synthetic_slide_match_edge",
+    "mode": "match",
+    "case": "synthetic_match",
+    "simple_target": false,
+    "expected": [73, 37],
+    "python_ddddocr": [73, 37],
+    "min_confidence": 0.01,
+    "source": "synthetic edge-based matching case; generated with Python ddddocr"
+  }
+]
