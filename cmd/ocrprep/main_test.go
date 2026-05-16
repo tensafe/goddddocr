@@ -18,6 +18,13 @@ func TestParseFlagsRequiresImage(t *testing.T) {
 	}
 }
 
+func TestParseFlagsRequiresReferenceForDiffPNG(t *testing.T) {
+	_, err := parseFlags([]string{"-image", "sample.png", "-diff-png", "diff.png"})
+	if err == nil {
+		t.Fatal("expected diff-png reference error")
+	}
+}
+
 func TestParseHSVRanges(t *testing.T) {
 	ranges, err := parseHSVRanges(`[[[90,30,30],[110,255,255]]]`)
 	if err != nil {
@@ -121,6 +128,45 @@ func TestCompareReferenceRejectsBothReferenceTypes(t *testing.T) {
 	_, err := compareReference(prepConfig{ComparePNGPath: "a.png", CompareCSVPath: "b.csv"}, []uint8{1}, 1, 1)
 	if err == nil {
 		t.Fatal("expected mutually-exclusive reference error")
+	}
+}
+
+func TestWriteDiffPNG(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "diff.png")
+	err := writeDiffPNG(path, []uint8{10, 20, 30}, []uint8{10, 25, 20}, 3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	img, err := png.Decode(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Bounds().Dx() != 3 || img.Bounds().Dy() != 1 {
+		t.Fatalf("unexpected bounds: %v", img.Bounds())
+	}
+	first := color.RGBAModel.Convert(img.At(0, 0)).(color.RGBA)
+	second := color.RGBAModel.Convert(img.At(1, 0)).(color.RGBA)
+	third := color.RGBAModel.Convert(img.At(2, 0)).(color.RGBA)
+	if first.R != 0 || first.G != 0 || first.B != 0 || first.A != 255 {
+		t.Fatalf("expected black exact pixel, got %#v", first)
+	}
+	if second.R == 0 || second.G != 0 || second.B != 0 {
+		t.Fatalf("expected red darker pixel, got %#v", second)
+	}
+	if third.R != 0 || third.G != 0 || third.B == 0 {
+		t.Fatalf("expected blue brighter pixel, got %#v", third)
+	}
+}
+
+func TestWriteDiffPNGRejectsMismatchedPixels(t *testing.T) {
+	err := writeDiffPNG(filepath.Join(t.TempDir(), "diff.png"), []uint8{1, 2}, []uint8{1}, 2, 1)
+	if err == nil {
+		t.Fatal("expected mismatched pixel error")
 	}
 }
 

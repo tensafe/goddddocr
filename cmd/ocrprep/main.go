@@ -25,6 +25,7 @@ type prepConfig struct {
 	MatrixCSVPath     string
 	ComparePNGPath    string
 	CompareCSVPath    string
+	DiffPNGPath       string
 	PNGFix            bool
 	ColorFilterColors string
 	ColorFilterRanges string
@@ -36,6 +37,7 @@ type prepReport struct {
 	MatrixCSVPath string      `json:"matrix_csv_path,omitempty"`
 	ComparePNG    string      `json:"compare_png,omitempty"`
 	CompareCSV    string      `json:"compare_csv,omitempty"`
+	DiffPNGPath   string      `json:"diff_png_path,omitempty"`
 	Width         int         `json:"width"`
 	Height        int         `json:"height"`
 	Pixels        int         `json:"pixels"`
@@ -95,6 +97,7 @@ func parseFlags(args []string) (prepConfig, error) {
 	fs.StringVar(&config.MatrixCSVPath, "matrix-csv", "", "optional grayscale pixel matrix CSV output path")
 	fs.StringVar(&config.ComparePNGPath, "compare-png", "", "optional reference grayscale PNG to compare")
 	fs.StringVar(&config.CompareCSVPath, "compare-csv", "", "optional reference pixel matrix CSV to compare")
+	fs.StringVar(&config.DiffPNGPath, "diff-png", "", "optional visual diff PNG output path; requires compare-png or compare-csv")
 	fs.BoolVar(&config.PNGFix, "png-fix", false, "composite transparent PNGs over a white background")
 	fs.StringVar(&config.ColorFilterColors, "color-filter-colors", "", "comma-separated color filter presets")
 	fs.StringVar(&config.ColorFilterRanges, "color-filter-custom-ranges", "", "JSON custom HSV ranges")
@@ -103,6 +106,9 @@ func parseFlags(args []string) (prepConfig, error) {
 	}
 	if strings.TrimSpace(config.ImagePath) == "" {
 		return prepConfig{}, fmt.Errorf("image is required")
+	}
+	if config.DiffPNGPath != "" && config.ComparePNGPath == "" && config.CompareCSVPath == "" {
+		return prepConfig{}, fmt.Errorf("diff-png requires compare-png or compare-csv")
 	}
 	return config, nil
 }
@@ -151,13 +157,26 @@ func run(config prepConfig) (prepReport, error) {
 	report.MatrixCSVPath = config.MatrixCSVPath
 	report.ComparePNG = config.ComparePNGPath
 	report.CompareCSV = config.CompareCSVPath
+	report.DiffPNGPath = config.DiffPNGPath
 	report.PNGFix = config.PNGFix
 	report.Colors = colors
 	report.RangeCount = len(ranges)
 	if config.ComparePNGPath != "" || config.CompareCSVPath != "" {
-		diff, err := compareReference(config, gray.Pix, result.Width, result.Height)
+		reference, referenceWidth, referenceHeight, err := readReference(config)
 		if err != nil {
 			return prepReport{}, err
+		}
+		if referenceWidth != result.Width || referenceHeight != result.Height {
+			return prepReport{}, fmt.Errorf("reference dimensions %dx%d do not match Go preprocessing %dx%d", referenceWidth, referenceHeight, result.Width, result.Height)
+		}
+		diff, err := comparePixels(gray.Pix, reference)
+		if err != nil {
+			return prepReport{}, err
+		}
+		if config.DiffPNGPath != "" {
+			if err := writeDiffPNG(config.DiffPNGPath, gray.Pix, reference, result.Width, result.Height); err != nil {
+				return prepReport{}, err
+			}
 		}
 		report.Diff = diff
 	}
@@ -197,18 +216,7 @@ func writeMatrixCSV(path string, pixels []uint8, width int, height int) error {
 }
 
 func compareReference(config prepConfig, pixels []uint8, width int, height int) (*diffReport, error) {
-	if config.ComparePNGPath != "" && config.CompareCSVPath != "" {
-		return nil, fmt.Errorf("only one of compare-png or compare-csv may be set")
-	}
-	var reference []uint8
-	var referenceWidth int
-	var referenceHeight int
-	var err error
-	if config.ComparePNGPath != "" {
-		reference, referenceWidth, referenceHeight, err = readGrayPNG(config.ComparePNGPath)
-	} else {
-		reference, referenceWidth, referenceHeight, err = readMatrixCSV(config.CompareCSVPath)
-	}
+	reference, referenceWidth, referenceHeight, err := readReference(config)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +224,19 @@ func compareReference(config prepConfig, pixels []uint8, width int, height int) 
 		return nil, fmt.Errorf("reference dimensions %dx%d do not match Go preprocessing %dx%d", referenceWidth, referenceHeight, width, height)
 	}
 	return comparePixels(pixels, reference)
+}
+
+func readReference(config prepConfig) ([]uint8, int, int, error) {
+	if config.ComparePNGPath != "" && config.CompareCSVPath != "" {
+		return nil, 0, 0, fmt.Errorf("only one of compare-png or compare-csv may be set")
+	}
+	if config.ComparePNGPath != "" {
+		return readGrayPNG(config.ComparePNGPath)
+	}
+	if config.CompareCSVPath != "" {
+		return readMatrixCSV(config.CompareCSVPath)
+	}
+	return nil, 0, 0, fmt.Errorf("compare-png or compare-csv is required")
 }
 
 func readGrayPNG(path string) ([]uint8, int, int, error) {
@@ -306,6 +327,47 @@ func comparePixels(actual []uint8, reference []uint8) (*diffReport, error) {
 	report.MeanAbsDiff = math.Round((totalAbsDiff/float64(len(actual)))*1000) / 1000
 	report.RMSE = math.Round(math.Sqrt(totalSquaredDiff/float64(len(actual)))*1000) / 1000
 	return report, nil
+}
+
+func writeDiffPNG(path string, actual []uint8, reference []uint8, width int, height int) error {
+	if len(actual) != len(reference) {
+		return fmt.Errorf("reference pixel count %d does not match actual %d", len(reference), len(actual))
+	}
+	if width < 0 || height < 0 || len(actual) != width*height {
+		return fmt.Errorf("pixel count %d does not match dimensions %dx%d", len(actual), width, height)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			idx := y*width + x
+			delta := int(actual[idx]) - int(reference[idx])
+			if delta == 0 {
+				img.SetRGBA(x, y, color.RGBA{A: 255})
+				continue
+			}
+			intensity := diffIntensity(delta)
+			if delta < 0 {
+				img.SetRGBA(x, y, color.RGBA{R: intensity, A: 255})
+			} else {
+				img.SetRGBA(x, y, color.RGBA{B: intensity, A: 255})
+			}
+		}
+	}
+	return writePNG(path, img)
+}
+
+func diffIntensity(delta int) uint8 {
+	if delta < 0 {
+		delta = -delta
+	}
+	intensity := delta * 8
+	if intensity < 32 {
+		intensity = 32
+	}
+	if intensity > 255 {
+		intensity = 255
+	}
+	return uint8(intensity)
 }
 
 func summarize(result *goddddocr.PreprocessResult, pixels []uint8) prepReport {

@@ -349,12 +349,15 @@ When you have a Python/PIL reference export, compare it directly:
 ```bash
 go run ./cmd/ocrprep \
   -image samples/yzm1.png \
-  -compare-csv /tmp/python-preprocess.csv
+  -compare-csv /tmp/python-preprocess.csv \
+  -diff-png /tmp/goddddocr-preprocess-diff.png
 ```
 
 Use `-compare-png` for grayscale PNG references. The JSON report includes
 exact-match, differing pixel count, max absolute difference, mean absolute
-difference, RMSE, and the reference SHA-256.
+difference, RMSE, and the reference SHA-256. The optional `-diff-png` output
+is black where pixels match, red where Go preprocessing is darker than the
+reference, and blue where Go preprocessing is brighter.
 
 ## Status
 

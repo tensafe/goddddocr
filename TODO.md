@@ -27,6 +27,8 @@
   - Acceptance: Go preprocessing can export grayscale model input, pixel matrix, and JSON metadata for Python/PIL comparison.
 - [x] Add preprocessing reference comparison.
   - Acceptance: Go preprocessing can compare against reference PNG/CSV exports and report pixel-level diff statistics.
+- [x] Add preprocessing visual diff export.
+  - Acceptance: Go preprocessing can write a diff PNG that highlights where Go and reference preprocessing diverge.
 - [x] Add beta model golden tests.
   - Acceptance: `ModelBeta` has at least one fixture and regression test.
 - [ ] Add real tsplay captcha samples.
@@ -110,8 +112,8 @@
 
 ## Recommended Next Batch
 
-1. Expand Python-vs-Go golden fixtures with more real captcha samples.
-2. Add Python-generated expected output for `ModelBeta` fixtures.
-3. Verify Linux Docker build end to end on a clean host.
-4. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.
-5. Record baseline load-test results for `workers=1/2/4`.
+1. Generate Python/PIL preprocessing references for bundled and private samples.
+2. Expand Python-vs-Go golden fixtures with more real captcha samples.
+3. Add Python-generated expected output for `ModelBeta` fixtures.
+4. Verify Linux Docker build end to end on a clean host.
+5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.
