@@ -74,6 +74,7 @@ func NewCharsetRangeChars(chars []string) *CharsetRange {
 type ClassifyOptions struct {
 	PNGFix       *bool
 	CharsetRange *CharsetRange
+	ColorFilter  *ColorFilterOptions
 	Probability  bool
 }
 
@@ -196,7 +197,12 @@ func (o *OCR) ClassifyImageDetailed(img image.Image, options *ClassifyOptions) (
 		pngFix = *options.PNGFix
 	}
 
-	inputData, width, err := preprocessOCRImage(img, pngFix)
+	var colorFilter *ColorFilterOptions
+	if options != nil {
+		colorFilter = options.ColorFilter
+	}
+
+	inputData, width, err := preprocessOCRImage(img, pngFix, colorFilter)
 	if err != nil {
 		return nil, err
 	}

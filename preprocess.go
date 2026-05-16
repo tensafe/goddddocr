@@ -11,7 +11,7 @@ import (
 
 const ocrTargetHeight = 64
 
-func preprocessOCRImage(img image.Image, pngFix bool) ([]float32, int, error) {
+func preprocessOCRImage(img image.Image, pngFix bool, colorFilter *ColorFilterOptions) ([]float32, int, error) {
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
@@ -25,6 +25,13 @@ func preprocessOCRImage(img image.Image, pngFix bool) ([]float32, int, error) {
 	}
 
 	src := normalizeToNRGBA(img, pngFix)
+	if colorFilter != nil {
+		filtered, err := applyColorFilter(src, colorFilter)
+		if err != nil {
+			return nil, 0, fmt.Errorf("apply color filter: %w", err)
+		}
+		src = filtered
+	}
 	resized := imaging.Resize(src, targetWidth, ocrTargetHeight, imaging.Lanczos)
 
 	data := make([]float32, targetWidth*ocrTargetHeight)

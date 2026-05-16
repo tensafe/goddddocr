@@ -115,11 +115,13 @@ func (s *Server) Metrics() ServerMetricsSnapshot {
 }
 
 type ocrRequest struct {
-	Image        string `json:"image"`
-	PNGFix       *bool  `json:"png_fix,omitempty"`
-	CharsetRange any    `json:"charset_range,omitempty"`
-	Confidence   bool   `json:"confidence,omitempty"`
-	Probability  bool   `json:"probability,omitempty"`
+	Image                   string     `json:"image"`
+	PNGFix                  *bool      `json:"png_fix,omitempty"`
+	CharsetRange            any        `json:"charset_range,omitempty"`
+	ColorFilterColors       []string   `json:"color_filter_colors,omitempty"`
+	ColorFilterCustomRanges []HSVRange `json:"color_filter_custom_ranges,omitempty"`
+	Confidence              bool       `json:"confidence,omitempty"`
+	Probability             bool       `json:"probability,omitempty"`
 }
 
 type ocrResponse struct {
@@ -169,11 +171,17 @@ func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_charset_range", err.Error())
 		return
 	}
+	colorFilter, err := newColorFilterOptions(req.ColorFilterColors, req.ColorFilterCustomRanges)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_color_filter", err.Error())
+		return
+	}
 
 	start := time.Now()
 	result, err := s.ocr.ClassifyBytesDetailed(data, &ClassifyOptions{
 		PNGFix:       req.PNGFix,
 		CharsetRange: charsetRange,
+		ColorFilter:  colorFilter,
 		Probability:  req.Probability,
 	})
 	if err != nil {
@@ -240,6 +248,21 @@ func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_charset_range", err.Error())
 		return
 	}
+	colorFilterColors, err := parseColorFilterColorsFormValue(r.FormValue("color_filter_colors"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_color_filter", err.Error())
+		return
+	}
+	colorFilterRanges, err := parseColorFilterRangesFormValue(r.FormValue("color_filter_custom_ranges"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_color_filter", err.Error())
+		return
+	}
+	colorFilter, err := newColorFilterOptions(colorFilterColors, colorFilterRanges)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_color_filter", err.Error())
+		return
+	}
 	confidence, err := parseOptionalBool(r.FormValue("confidence"))
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_confidence", "confidence must be a boolean")
@@ -255,6 +278,7 @@ func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
 	result, err := s.ocr.ClassifyBytesDetailed(data, &ClassifyOptions{
 		PNGFix:       pngFix,
 		CharsetRange: charsetRange,
+		ColorFilter:  colorFilter,
 		Probability:  probability,
 	})
 	if err != nil {
@@ -373,6 +397,62 @@ func parseCharsetRangeValue(value any) (*CharsetRange, error) {
 	default:
 		return nil, fmt.Errorf("charset_range must be a number, string, or string array")
 	}
+}
+
+func parseColorFilterColorsFormValue(value string) ([]string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	if strings.HasPrefix(value, "[") {
+		var colors []string
+		if err := json.Unmarshal([]byte(value), &colors); err != nil {
+			return nil, fmt.Errorf("color_filter_colors array must contain strings")
+		}
+		return colors, nil
+	}
+	parts := strings.Split(value, ",")
+	colors := make([]string, 0, len(parts))
+	for _, part := range parts {
+		colorName := strings.TrimSpace(part)
+		if colorName != "" {
+			colors = append(colors, colorName)
+		}
+	}
+	return colors, nil
+}
+
+func parseColorFilterRangesFormValue(value string) ([]HSVRange, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	var ranges []HSVRange
+	if err := json.Unmarshal([]byte(value), &ranges); err != nil {
+		return nil, fmt.Errorf("color_filter_custom_ranges must be a JSON array of HSV ranges")
+	}
+	return ranges, nil
+}
+
+func newColorFilterOptions(colors []string, ranges []HSVRange) (*ColorFilterOptions, error) {
+	cleanedColors := make([]string, 0, len(colors))
+	for _, colorName := range colors {
+		colorName = strings.TrimSpace(colorName)
+		if colorName != "" {
+			cleanedColors = append(cleanedColors, colorName)
+		}
+	}
+	if len(cleanedColors) == 0 && len(ranges) == 0 {
+		return nil, nil
+	}
+	options := &ColorFilterOptions{
+		Colors: cleanedColors,
+		Ranges: ranges,
+	}
+	if _, err := options.hsvRanges(); err != nil {
+		return nil, err
+	}
+	return options, nil
 }
 
 type errorResponse struct {

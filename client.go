@@ -61,10 +61,12 @@ func NewOCRClient(baseURL string, options ...OCRClientOption) *OCRClient {
 }
 
 type RemoteClassifyOptions struct {
-	PNGFix       *bool
-	CharsetRange any
-	Confidence   bool
-	Probability  bool
+	PNGFix                  *bool
+	CharsetRange            any
+	ColorFilterColors       []string
+	ColorFilterCustomRanges []HSVRange
+	Confidence              bool
+	Probability             bool
 }
 
 type RemoteClassifyResult struct {
@@ -112,6 +114,8 @@ func (c *OCRClient) ClassifyBytes(ctx context.Context, image []byte, options *Re
 	if options != nil {
 		reqBody.PNGFix = options.PNGFix
 		reqBody.CharsetRange = options.CharsetRange
+		reqBody.ColorFilterColors = options.ColorFilterColors
+		reqBody.ColorFilterCustomRanges = options.ColorFilterCustomRanges
 		reqBody.Confidence = options.Confidence
 		reqBody.Probability = options.Probability
 	}

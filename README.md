@@ -73,6 +73,8 @@ Endpoints:
   "image": "base64-encoded-image",
   "png_fix": false,
   "charset_range": "0123456789abcdefghijklmnopqrstuvwxyz",
+  "color_filter_colors": ["red", "blue"],
+  "color_filter_custom_ranges": [[[90, 30, 30], [110, 255, 255]]],
   "confidence": true,
   "probability": false
 }
@@ -94,6 +96,12 @@ matrix:
   }
 }
 ```
+
+`color_filter_colors` keeps only matching pixels and turns the rest white before
+OCR preprocessing. Presets match ddddocr's HSV ranges: `red`, `blue`, `green`,
+`yellow`, `orange`, `purple`, `cyan`, `black`, `white`, and `gray`.
+`color_filter_custom_ranges` accepts HSV ranges in OpenCV scale
+`[[lower_hsv], [upper_hsv]]`, where H is `0..180` and S/V are `0..255`.
 
 `GET /metrics` returns service counters and latency aggregates as JSON:
 

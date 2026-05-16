@@ -9,15 +9,17 @@ import (
 )
 
 type goldenOCRFixture struct {
-	Name          string  `json:"name"`
-	Image         string  `json:"image"`
-	Model         Model   `json:"model"`
-	PythonDDDDOCR string  `json:"python_ddddocr,omitempty"`
-	Expected      string  `json:"expected"`
-	CharsetRange  string  `json:"charset_range,omitempty"`
-	PNGFix        *bool   `json:"png_fix,omitempty"`
-	MinConfidence float64 `json:"min_confidence,omitempty"`
-	Source        string  `json:"source,omitempty"`
+	Name          string     `json:"name"`
+	Image         string     `json:"image"`
+	Model         Model      `json:"model"`
+	PythonDDDDOCR string     `json:"python_ddddocr,omitempty"`
+	Expected      string     `json:"expected"`
+	CharsetRange  string     `json:"charset_range,omitempty"`
+	Colors        []string   `json:"color_filter_colors,omitempty"`
+	Ranges        []HSVRange `json:"color_filter_custom_ranges,omitempty"`
+	PNGFix        *bool      `json:"png_fix,omitempty"`
+	MinConfidence float64    `json:"min_confidence,omitempty"`
+	Source        string     `json:"source,omitempty"`
 }
 
 func TestGoldenOCRFixtures(t *testing.T) {
@@ -118,6 +120,13 @@ func fixtureOptions(fixture goldenOCRFixture) *ClassifyOptions {
 	}
 	if fixture.CharsetRange != "" {
 		options.CharsetRange = NewCharsetRangeString(fixture.CharsetRange)
+		hasOptions = true
+	}
+	if len(fixture.Colors) > 0 || len(fixture.Ranges) > 0 {
+		options.ColorFilter = &ColorFilterOptions{
+			Colors: fixture.Colors,
+			Ranges: fixture.Ranges,
+		}
 		hasOptions = true
 	}
 	if !hasOptions {

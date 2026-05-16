@@ -64,6 +64,36 @@ func TestParseCharsetRangeValue(t *testing.T) {
 	}
 }
 
+func TestParseColorFilterFormValues(t *testing.T) {
+	colors, err := parseColorFilterColorsFormValue("red, blue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(colors) != 2 || colors[0] != "red" || colors[1] != "blue" {
+		t.Fatalf("colors = %#v", colors)
+	}
+
+	colors, err = parseColorFilterColorsFormValue(`["green","yellow"]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(colors) != 2 || colors[0] != "green" || colors[1] != "yellow" {
+		t.Fatalf("json colors = %#v", colors)
+	}
+
+	ranges, err := parseColorFilterRangesFormValue(`[[[100,50,50],[130,255,255]]]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ranges) != 1 || ranges[0].Lower != [3]int{100, 50, 50} {
+		t.Fatalf("ranges = %#v", ranges)
+	}
+
+	if _, err := newColorFilterOptions([]string{"missing"}, nil); err == nil {
+		t.Fatal("expected invalid color preset")
+	}
+}
+
 func TestServerMetricsEndpoint(t *testing.T) {
 	s := NewServer(nil, WithLogger(nil))
 	server := httptest.NewServer(s.Handler())

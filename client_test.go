@@ -27,6 +27,12 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 			if !req.Probability {
 				t.Fatal("expected probability request")
 			}
+			if len(req.ColorFilterColors) != 1 || req.ColorFilterColors[0] != "red" {
+				t.Fatalf("unexpected color filter colors: %#v", req.ColorFilterColors)
+			}
+			if len(req.ColorFilterCustomRanges) != 1 || req.ColorFilterCustomRanges[0].Lower != [3]int{100, 50, 50} {
+				t.Fatalf("unexpected color filter ranges: %#v", req.ColorFilterCustomRanges)
+			}
 			got, err := base64.StdEncoding.DecodeString(req.Image)
 			if err != nil {
 				t.Fatalf("decode image: %v", err)
@@ -59,9 +65,11 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 	}
 
 	result, err := client.ClassifyBytes(context.Background(), image, &RemoteClassifyOptions{
-		CharsetRange: "3nd",
-		Confidence:   true,
-		Probability:  true,
+		CharsetRange:            "3nd",
+		ColorFilterColors:       []string{"red"},
+		ColorFilterCustomRanges: []HSVRange{{Lower: [3]int{100, 50, 50}, Upper: [3]int{130, 255, 255}}},
+		Confidence:              true,
+		Probability:             true,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -40,7 +40,7 @@
   - Acceptance: API can return text and confidence without returning a huge probability matrix by default.
 - [x] Add optional full probability matrix output.
   - Acceptance: caller can opt in for debugging parity with Python.
-- [ ] Add HSV color filtering.
+- [x] Add HSV color filtering.
   - Acceptance: supports common presets such as red, blue, green, yellow, black, white, gray.
 - [ ] Add custom ONNX + charset config.
   - Acceptance: caller can load external model and charset metadata.
