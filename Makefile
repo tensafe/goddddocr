@@ -1,4 +1,4 @@
-.PHONY: test server ort doctor smoke docker-smoke bench-workers
+.PHONY: test server ort doctor smoke docker-smoke bench-workers eval-samples
 
 test:
 	go test ./...
@@ -20,3 +20,6 @@ docker-smoke:
 
 bench-workers:
 	scripts/bench_workers.sh
+
+eval-samples:
+	go run ./cmd/ocreval -manifest fixtures/ocr_golden.json

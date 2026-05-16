@@ -305,6 +305,29 @@ ignored local sample directory, record the Python ddddocr output in
 documenting an intentional compatibility difference. If Python tooling is not
 available yet, `expected` may still be used as a Go model regression baseline.
 
+## Local Sample Accuracy
+
+Use `ocreval` for private or real-world captcha samples that should not be
+committed to the repository. Directory mode treats each image filename stem as
+the expected OCR text:
+
+```bash
+mkdir -p samples/local
+# put files such as samples/local/3n3d.png or samples/local/abcd.jpg here
+go run ./cmd/ocreval -dir samples/local -csv /tmp/ocr-eval.csv -markdown /tmp/ocr-eval.md
+```
+
+Manifest mode uses the same fields as `fixtures/ocr_golden.json`, including
+`model`, `charset_range`, `png_fix`, `color_filter_colors`, and
+`color_filter_custom_ranges`:
+
+```bash
+go run ./cmd/ocreval -manifest fixtures/ocr_golden.json -json
+```
+
+Ignored local paths are available for private runs: `samples/local/`,
+`samples/private/`, and `reports/ocr-eval/`.
+
 ## Status
 
 - OCR classification: implemented.

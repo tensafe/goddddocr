@@ -27,6 +27,8 @@
   - Acceptance: `ModelBeta` has at least one fixture and regression test.
 - [ ] Add real tsplay captcha samples.
   - Acceptance: project has a private or ignored sample set for local accuracy checks.
+- [x] Add local sample accuracy evaluator.
+  - Acceptance: local/private sample directories can be evaluated with JSON, CSV, and Markdown outputs.
 
 ## P2: OCR Feature Parity
 

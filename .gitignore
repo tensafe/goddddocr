@@ -6,3 +6,6 @@
 /third_party/onnxruntime/linux_arm64/
 /third_party/onnxruntime/windows_amd64/
 /third_party/onnxruntime/windows_arm64/
+/samples/local/
+/samples/private/
+/reports/ocr-eval/
