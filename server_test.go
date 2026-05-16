@@ -332,6 +332,62 @@ func TestServerSlideComparisonFileEndpoint(t *testing.T) {
 	}
 }
 
+func TestServerSlideMatchEndpoint(t *testing.T) {
+	target, background := syntheticSlideMatchImages()
+	payload, err := json.Marshal(slideMatchRequest{
+		TargetImage:     base64.StdEncoding.EncodeToString(encodePNG(t, target)),
+		BackgroundImage: base64.StdEncoding.EncodeToString(encodePNG(t, background)),
+		SimpleTarget:    true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil))
+	req := httptest.NewRequest(http.MethodPost, "/slide_match", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("slide match status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	var resp slideMatchResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result.TargetX != 73 || resp.Result.TargetY != 37 {
+		t.Fatalf("target = %#v, want [73 37]", resp.Result)
+	}
+	if resp.Result.Confidence < 0.99 {
+		t.Fatalf("confidence = %f, want near 1", resp.Result.Confidence)
+	}
+}
+
+func TestServerSlideMatchEndpointAlias(t *testing.T) {
+	target, background := syntheticSlideMatchImages()
+	payload, err := json.Marshal(slideMatchRequest{
+		TargetImage:     base64.StdEncoding.EncodeToString(encodePNG(t, target)),
+		BackgroundImage: base64.StdEncoding.EncodeToString(encodePNG(t, background)),
+		SimpleTarget:    true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil))
+	req := httptest.NewRequest(http.MethodPost, "/slide-match", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("slide match alias status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func writeMultipartImage(t *testing.T, writer *multipart.Writer, fieldName string, fileName string, data []byte) {
 	t.Helper()
 	part, err := writer.CreateFormFile(fieldName, fileName)

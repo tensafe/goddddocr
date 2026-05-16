@@ -8,14 +8,17 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"math"
 )
 
 const slideComparisonThreshold = 30
+const slideEdgeThreshold = 80
 
 type SlideResult struct {
-	Target  []int `json:"target"`
-	TargetX int   `json:"target_x"`
-	TargetY int   `json:"target_y"`
+	Target     []int   `json:"target"`
+	TargetX    int     `json:"target_x"`
+	TargetY    int     `json:"target_y"`
+	Confidence float64 `json:"confidence,omitempty"`
 }
 
 func SlideComparisonBytes(targetData []byte, backgroundData []byte) (*SlideResult, error) {
@@ -28,6 +31,18 @@ func SlideComparisonBytes(targetData []byte, backgroundData []byte) (*SlideResul
 		return nil, fmt.Errorf("decode background image: %w", err)
 	}
 	return SlideComparisonImages(target, background)
+}
+
+func SlideMatchBytes(targetData []byte, backgroundData []byte, simpleTarget bool) (*SlideResult, error) {
+	target, _, err := image.Decode(bytes.NewReader(targetData))
+	if err != nil {
+		return nil, fmt.Errorf("decode target image: %w", err)
+	}
+	background, _, err := image.Decode(bytes.NewReader(backgroundData))
+	if err != nil {
+		return nil, fmt.Errorf("decode background image: %w", err)
+	}
+	return SlideMatchImages(target, background, simpleTarget)
 }
 
 func SlideComparisonImages(target image.Image, background image.Image) (*SlideResult, error) {
@@ -45,6 +60,66 @@ func SlideComparisonImages(target image.Image, background image.Image) (*SlideRe
 		return nil, fmt.Errorf("target dimensions %dx%d do not match background %dx%d", width, height, backgroundBounds.Dx(), backgroundBounds.Dy())
 	}
 
+	binary := slideDiffBinary(target, background, targetBounds, backgroundBounds, width, height)
+	filtered := morphologyOpen(morphologyClose(binary, width, height), width, height)
+	component, ok := largestBinaryComponent(filtered, width, height)
+	if !ok {
+		return &SlideResult{Target: []int{0, 0}}, nil
+	}
+	centerX := component.minX + (component.maxX-component.minX+1)/2
+	centerY := component.minY + (component.maxY-component.minY+1)/2
+	return &SlideResult{
+		Target:  []int{centerX, centerY},
+		TargetX: centerX,
+		TargetY: centerY,
+	}, nil
+}
+
+func SlideMatchImages(target image.Image, background image.Image, simpleTarget bool) (*SlideResult, error) {
+	if target == nil || background == nil {
+		return nil, fmt.Errorf("target and background images are required")
+	}
+	targetBounds := target.Bounds()
+	backgroundBounds := background.Bounds()
+	targetWidth := targetBounds.Dx()
+	targetHeight := targetBounds.Dy()
+	backgroundWidth := backgroundBounds.Dx()
+	backgroundHeight := backgroundBounds.Dy()
+	if targetWidth <= 0 || targetHeight <= 0 {
+		return nil, fmt.Errorf("empty target image")
+	}
+	if backgroundWidth <= 0 || backgroundHeight <= 0 {
+		return nil, fmt.Errorf("empty background image")
+	}
+	if targetWidth > backgroundWidth || targetHeight > backgroundHeight {
+		return nil, fmt.Errorf("target dimensions %dx%d exceed background %dx%d", targetWidth, targetHeight, backgroundWidth, backgroundHeight)
+	}
+
+	targetGray := imageToGrayBuffer(target, targetBounds)
+	backgroundGray := imageToGrayBuffer(background, backgroundBounds)
+	matchTarget := targetGray
+	matchBackground := backgroundGray
+	if !simpleTarget {
+		targetEdges := sobelEdges(targetGray, targetWidth, targetHeight)
+		backgroundEdges := sobelEdges(backgroundGray, backgroundWidth, backgroundHeight)
+		if hasNonZeroByte(targetEdges) && hasNonZeroByte(backgroundEdges) {
+			matchTarget = targetEdges
+			matchBackground = backgroundEdges
+		}
+	}
+
+	x, y, confidence := matchTemplateCCOEFFNormed(matchBackground, backgroundWidth, backgroundHeight, matchTarget, targetWidth, targetHeight)
+	centerX := x + targetWidth/2
+	centerY := y + targetHeight/2
+	return &SlideResult{
+		Target:     []int{centerX, centerY},
+		TargetX:    centerX,
+		TargetY:    centerY,
+		Confidence: confidence,
+	}, nil
+}
+
+func slideDiffBinary(target image.Image, background image.Image, targetBounds image.Rectangle, backgroundBounds image.Rectangle, width int, height int) []bool {
 	binary := make([]bool, width*height)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
@@ -58,19 +133,121 @@ func SlideComparisonImages(target image.Image, background image.Image) (*SlideRe
 			binary[y*width+x] = diff > slideComparisonThreshold
 		}
 	}
+	return binary
+}
 
-	filtered := morphologyOpen(morphologyClose(binary, width, height), width, height)
-	component, ok := largestBinaryComponent(filtered, width, height)
-	if !ok {
-		return &SlideResult{Target: []int{0, 0}}, nil
+func imageToGrayBuffer(img image.Image, bounds image.Rectangle) []uint8 {
+	width := bounds.Dx()
+	height := bounds.Dy()
+	gray := make([]uint8, width*height)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			c := color.NRGBAModel.Convert(img.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.NRGBA)
+			gray[y*width+x] = grayscalePILLike(c.R, c.G, c.B)
+		}
 	}
-	centerX := component.minX + (component.maxX-component.minX+1)/2
-	centerY := component.minY + (component.maxY-component.minY+1)/2
-	return &SlideResult{
-		Target:  []int{centerX, centerY},
-		TargetX: centerX,
-		TargetY: centerY,
-	}, nil
+	return gray
+}
+
+func sobelEdges(gray []uint8, width int, height int) []uint8 {
+	edges := make([]uint8, len(gray))
+	if width < 3 || height < 3 {
+		return edges
+	}
+	for y := 1; y < height-1; y++ {
+		for x := 1; x < width-1; x++ {
+			idx := y*width + x
+			gx := -int(gray[idx-width-1]) + int(gray[idx-width+1]) -
+				2*int(gray[idx-1]) + 2*int(gray[idx+1]) -
+				int(gray[idx+width-1]) + int(gray[idx+width+1])
+			gy := -int(gray[idx-width-1]) - 2*int(gray[idx-width]) - int(gray[idx-width+1]) +
+				int(gray[idx+width-1]) + 2*int(gray[idx+width]) + int(gray[idx+width+1])
+			magnitude := math.Sqrt(float64(gx*gx + gy*gy))
+			if magnitude >= slideEdgeThreshold {
+				edges[idx] = 255
+			}
+		}
+	}
+	return edges
+}
+
+func hasNonZeroByte(data []uint8) bool {
+	for _, value := range data {
+		if value != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func matchTemplateCCOEFFNormed(background []uint8, backgroundWidth int, backgroundHeight int, target []uint8, targetWidth int, targetHeight int) (int, int, float64) {
+	targetMean, targetEnergy := meanAndCenteredEnergy(target)
+	bestX := 0
+	bestY := 0
+	bestScore := math.Inf(-1)
+
+	for y := 0; y <= backgroundHeight-targetHeight; y++ {
+		for x := 0; x <= backgroundWidth-targetWidth; x++ {
+			patchMean := patchMean(background, backgroundWidth, x, y, targetWidth, targetHeight)
+			var numerator float64
+			var patchEnergy float64
+			for ty := 0; ty < targetHeight; ty++ {
+				backgroundOffset := (y+ty)*backgroundWidth + x
+				targetOffset := ty * targetWidth
+				for tx := 0; tx < targetWidth; tx++ {
+					targetDelta := float64(target[targetOffset+tx]) - targetMean
+					patchDelta := float64(background[backgroundOffset+tx]) - patchMean
+					numerator += targetDelta * patchDelta
+					patchEnergy += patchDelta * patchDelta
+				}
+			}
+			score := normalizedScore(numerator, targetEnergy, patchEnergy)
+			if score > bestScore {
+				bestX = x
+				bestY = y
+				bestScore = score
+			}
+		}
+	}
+	if math.IsInf(bestScore, -1) {
+		return 0, 0, 0
+	}
+	return bestX, bestY, bestScore
+}
+
+func meanAndCenteredEnergy(values []uint8) (float64, float64) {
+	if len(values) == 0 {
+		return 0, 0
+	}
+	var sum float64
+	for _, value := range values {
+		sum += float64(value)
+	}
+	mean := sum / float64(len(values))
+	var energy float64
+	for _, value := range values {
+		delta := float64(value) - mean
+		energy += delta * delta
+	}
+	return mean, energy
+}
+
+func patchMean(background []uint8, backgroundWidth int, x int, y int, width int, height int) float64 {
+	var sum float64
+	for yy := 0; yy < height; yy++ {
+		offset := (y+yy)*backgroundWidth + x
+		for xx := 0; xx < width; xx++ {
+			sum += float64(background[offset+xx])
+		}
+	}
+	return sum / float64(width*height)
+}
+
+func normalizedScore(numerator float64, targetEnergy float64, patchEnergy float64) float64 {
+	if targetEnergy == 0 || patchEnergy == 0 {
+		return 0
+	}
+	return numerator / math.Sqrt(targetEnergy*patchEnergy)
 }
 
 func absUint8Diff(a uint8, b uint8) uint8 {

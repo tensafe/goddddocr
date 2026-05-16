@@ -113,19 +113,19 @@
   - Acceptance: `/det` accepts base64 JSON and returns Python-compatible bounding boxes.
 - [x] Port slide comparison.
   - Acceptance: diff-based gap location works without Python.
-- [ ] Port slide match.
+- [x] Port slide match.
   - Acceptance: template/edge matching returns target coordinates compatible with Python.
 - [x] Decide GoCV vs pure-Go image ops for slide comparison.
   - Acceptance: use pure-Go image operations to keep Windows/macOS/Linux packaging light.
 - [x] Add HTTP endpoint for slide comparison.
   - Acceptance: `/slide_comparison` and `/slide-comparison` are documented and tested.
-- [ ] Add HTTP endpoint for slide match.
+- [x] Add HTTP endpoint for slide match.
   - Acceptance: API shape is documented and tested.
 
 ## Recommended Next Batch
 
 1. Add detection golden fixtures against Python ddddocr.
-2. Port slide match simple template matching, then edge-based matching.
-3. Add Python golden fixtures for slide comparison and slide match.
-4. Document tsplay flow usage for `/det` and `/slide_comparison`.
+2. Add Python golden fixtures for slide comparison and slide match.
+3. Tune edge-based slide match against real captcha samples.
+4. Document tsplay flow usage for `/det`, `/slide_comparison`, and `/slide_match`.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.

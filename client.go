@@ -94,6 +94,16 @@ type RemoteSlideComparisonResult struct {
 	RequestID        string      `json:"request_id,omitempty"`
 }
 
+type RemoteSlideMatchOptions struct {
+	SimpleTarget bool
+}
+
+type RemoteSlideMatchResult struct {
+	Result           SlideResult `json:"result"`
+	ProcessingTimeMS float64     `json:"processing_time_ms"`
+	RequestID        string      `json:"request_id,omitempty"`
+}
+
 type RemoteError struct {
 	StatusCode int
 	Code       string
@@ -164,6 +174,66 @@ func (c *OCRClient) SlideComparisonBytes(ctx context.Context, targetImage []byte
 	var result RemoteSlideComparisonResult
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("decode slide comparison response: %w", err)
+	}
+	return &result, nil
+}
+
+func (c *OCRClient) SlideMatchBytes(ctx context.Context, targetImage []byte, backgroundImage []byte, options *RemoteSlideMatchOptions) (*RemoteSlideMatchResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("nil OCR client")
+	}
+	if c.baseURL == "" {
+		return nil, fmt.Errorf("base URL is empty")
+	}
+	if len(targetImage) == 0 {
+		return nil, fmt.Errorf("target image is empty")
+	}
+	if len(backgroundImage) == 0 {
+		return nil, fmt.Errorf("background image is empty")
+	}
+	if c.maxImageBytes > 0 && int64(len(targetImage)) > c.maxImageBytes {
+		return nil, fmt.Errorf("target image exceeds %d bytes", c.maxImageBytes)
+	}
+	if c.maxImageBytes > 0 && int64(len(backgroundImage)) > c.maxImageBytes {
+		return nil, fmt.Errorf("background image exceeds %d bytes", c.maxImageBytes)
+	}
+
+	reqBody := slideMatchRequest{
+		TargetImage:     base64.StdEncoding.EncodeToString(targetImage),
+		BackgroundImage: base64.StdEncoding.EncodeToString(backgroundImage),
+	}
+	if options != nil {
+		reqBody.SimpleTarget = options.SimpleTarget
+	}
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/slide_match", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, c.maxBodyBytes()))
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, parseRemoteError(resp, body)
+	}
+
+	var result RemoteSlideMatchResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("decode slide match response: %w", err)
 	}
 	return &result, nil
 }

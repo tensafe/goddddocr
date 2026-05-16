@@ -100,6 +100,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /slide-comparison", s.handleSlideComparison)
 	mux.HandleFunc("POST /slide_comparison/file", s.handleSlideComparisonFile)
 	mux.HandleFunc("POST /slide-comparison/file", s.handleSlideComparisonFile)
+	mux.HandleFunc("POST /slide_match", s.handleSlideMatch)
+	mux.HandleFunc("POST /slide-match", s.handleSlideMatch)
+	mux.HandleFunc("POST /slide_match/file", s.handleSlideMatchFile)
+	mux.HandleFunc("POST /slide-match/file", s.handleSlideMatchFile)
 	return s.accessLog(s.requestID(mux))
 }
 
@@ -113,6 +117,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	payload["detection"] = s.detector != nil
 	payload["slide_comparison"] = true
+	payload["slide_match"] = true
 	writeJSON(w, r, http.StatusOK, payload)
 }
 
@@ -129,6 +134,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 	payload["detection"] = s.detector != nil
 	payload["slide_comparison"] = true
+	payload["slide_match"] = true
 	writeJSON(w, r, http.StatusOK, payload)
 }
 
@@ -179,6 +185,18 @@ type slideComparisonRequest struct {
 }
 
 type slideComparisonResponse struct {
+	Result           SlideResult `json:"result"`
+	ProcessingTimeMS float64     `json:"processing_time_ms"`
+	RequestID        string      `json:"request_id,omitempty"`
+}
+
+type slideMatchRequest struct {
+	TargetImage     string `json:"target_image"`
+	BackgroundImage string `json:"background_image"`
+	SimpleTarget    bool   `json:"simple_target,omitempty"`
+}
+
+type slideMatchResponse struct {
 	Result           SlideResult `json:"result"`
 	ProcessingTimeMS float64     `json:"processing_time_ms"`
 	RequestID        string      `json:"request_id,omitempty"`
@@ -510,16 +528,20 @@ func (s *Server) handleSlideComparisonFile(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) decodeSlideComparisonRequest(w http.ResponseWriter, r *http.Request, req slideComparisonRequest) ([]byte, []byte, bool) {
-	if strings.TrimSpace(req.TargetImage) == "" {
+	return s.decodeSlidePairRequest(w, r, req.TargetImage, req.BackgroundImage)
+}
+
+func (s *Server) decodeSlidePairRequest(w http.ResponseWriter, r *http.Request, targetImage string, backgroundImage string) ([]byte, []byte, bool) {
+	if strings.TrimSpace(targetImage) == "" {
 		writeError(w, r, http.StatusBadRequest, "missing_target_image", "target_image is required")
 		return nil, nil, false
 	}
-	if strings.TrimSpace(req.BackgroundImage) == "" {
+	if strings.TrimSpace(backgroundImage) == "" {
 		writeError(w, r, http.StatusBadRequest, "missing_background_image", "background_image is required")
 		return nil, nil, false
 	}
 
-	targetData, err := decodeBase64Image(req.TargetImage)
+	targetData, err := decodeBase64Image(targetImage)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_target_image", err.Error())
 		return nil, nil, false
@@ -529,7 +551,7 @@ func (s *Server) decodeSlideComparisonRequest(w http.ResponseWriter, r *http.Req
 		return nil, nil, false
 	}
 
-	backgroundData, err := decodeBase64Image(req.BackgroundImage)
+	backgroundData, err := decodeBase64Image(backgroundImage)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, "invalid_background_image", err.Error())
 		return nil, nil, false
@@ -551,6 +573,84 @@ func (s *Server) writeSlideComparisonResult(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, r, http.StatusOK, slideComparisonResponse{
+		Result:           *result,
+		ProcessingTimeMS: float64(time.Since(start).Microseconds()) / 1000.0,
+		RequestID:        requestIDFrom(r),
+	})
+}
+
+func (s *Server) handleSlideMatch(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	defer r.Body.Close()
+
+	var req slideMatchRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", fmt.Sprintf("request exceeds %d bytes", s.maxBodyBytes))
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return
+	}
+
+	targetData, backgroundData, ok := s.decodeSlidePairRequest(w, r, req.TargetImage, req.BackgroundImage)
+	if !ok {
+		return
+	}
+	s.writeSlideMatchResult(w, r, targetData, backgroundData, req.SimpleTarget)
+}
+
+func (s *Server) handleSlideMatchFile(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	defer r.Body.Close()
+
+	if err := r.ParseMultipartForm(s.maxBodyBytes); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", fmt.Sprintf("request exceeds %d bytes", s.maxBodyBytes))
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_multipart", "invalid multipart form")
+		return
+	}
+
+	targetData, err := readMultipartImage(r, s.maxImageBytes, "target_file", "target_image", "target")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			writeError(w, r, http.StatusBadRequest, "missing_target_image", "target image file is required")
+			return
+		}
+		writeError(w, r, http.StatusRequestEntityTooLarge, "target_image_too_large", err.Error())
+		return
+	}
+	backgroundData, err := readMultipartImage(r, s.maxImageBytes, "background_file", "background_image", "background")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			writeError(w, r, http.StatusBadRequest, "missing_background_image", "background image file is required")
+			return
+		}
+		writeError(w, r, http.StatusRequestEntityTooLarge, "background_image_too_large", err.Error())
+		return
+	}
+	simpleTarget, err := parseOptionalBool(r.FormValue("simple_target"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_simple_target", "simple_target must be a boolean")
+		return
+	}
+
+	s.writeSlideMatchResult(w, r, targetData, backgroundData, simpleTarget)
+}
+
+func (s *Server) writeSlideMatchResult(w http.ResponseWriter, r *http.Request, targetData []byte, backgroundData []byte, simpleTarget bool) {
+	start := time.Now()
+	result, err := SlideMatchBytes(targetData, backgroundData, simpleTarget)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "slide_match_failed", err.Error())
+		return
+	}
+
+	writeJSON(w, r, http.StatusOK, slideMatchResponse{
 		Result:           *result,
 		ProcessingTimeMS: float64(time.Since(start).Microseconds()) / 1000.0,
 		RequestID:        requestIDFrom(r),

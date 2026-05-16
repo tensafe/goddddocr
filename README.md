@@ -151,6 +151,10 @@ Endpoints:
 - `POST /slide-comparison`
 - `POST /slide_comparison/file`
 - `POST /slide-comparison/file`
+- `POST /slide_match`
+- `POST /slide-match`
+- `POST /slide_match/file`
+- `POST /slide-match/file`
 
 `POST /ocr` accepts:
 
@@ -266,6 +270,51 @@ The HTTP client exposes the same endpoint:
 ```go
 result, err := client.SlideComparisonBytes(ctx, targetImageBytes, backgroundImageBytes)
 fmt.Println(result.Result.Target)
+```
+
+## Slide Match API
+
+Slide match locates a smaller slider image within a larger background. It is
+also pure Go. `simple_target=true` uses grayscale template matching; the
+default path uses a lightweight edge map before matching:
+
+```bash
+curl -s -X POST http://127.0.0.1:8088/slide_match \
+  -H 'content-type: application/json' \
+  -d "{\"target_image\":\"$(base64 -i target.png)\",\"background_image\":\"$(base64 -i background.png)\",\"simple_target\":true}"
+```
+
+`POST /slide_match` and `POST /slide-match` accept:
+
+```json
+{
+  "target_image": "base64-encoded-slider-piece",
+  "background_image": "base64-encoded-background",
+  "simple_target": true
+}
+```
+
+The response includes the ddddocr target shape plus a normalized confidence
+score:
+
+```json
+{
+  "result": {
+    "target": [73, 37],
+    "target_x": 73,
+    "target_y": 37,
+    "confidence": 0.99
+  }
+}
+```
+
+The HTTP client exposes:
+
+```go
+result, err := client.SlideMatchBytes(ctx, targetImageBytes, backgroundImageBytes, &goddddocr.RemoteSlideMatchOptions{
+    SimpleTarget: true,
+})
+fmt.Println(result.Result.Target, result.Result.Confidence)
 ```
 
 `GET /metrics` returns service counters and latency aggregates as JSON:
@@ -487,7 +536,7 @@ GODDDDOCR_PREP_MAX_RMSE=0.02 \
 ## Status
 
 - OCR classification: implemented.
-- HTTP service: `/health`, `/ocr`, `/ocr/file`, `/det`, `/det/file`, `/slide_comparison`.
+- HTTP service: `/health`, `/ocr`, `/ocr/file`, `/det`, `/det/file`, `/slide_comparison`, `/slide_match`.
 - Detection: module and HTTP API implemented.
 - Slide comparison: module and HTTP API implemented.
-- Slide matching: planned.
+- Slide matching: module and HTTP API implemented.
