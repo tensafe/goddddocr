@@ -19,7 +19,11 @@ import (
 
 func main() {
 	addr := flag.String("addr", envString("GODDDDOCR_ADDR", ":8088"), "HTTP listen address")
-	model := flag.String("model", envString("GODDDDOCR_MODEL", string(goddddocr.ModelOld)), "OCR model: old or beta")
+	model := flag.String("model", envString("GODDDDOCR_MODEL", string(goddddocr.ModelOld)), "OCR model: old, beta, or custom")
+	modelPath := flag.String("model-path", envString("GODDDDOCR_MODEL_PATH", ""), "path to a custom ONNX OCR model")
+	charsetPath := flag.String("charset-path", envString("GODDDDOCR_CHARSET_PATH", ""), "path to a custom charset JSON array")
+	inputName := flag.String("input-name", envString("GODDDDOCR_INPUT_NAME", ""), "ONNX input name override")
+	outputName := flag.String("output-name", envString("GODDDDOCR_OUTPUT_NAME", ""), "ONNX output name override")
 	ortLib := flag.String("onnxruntime-lib", envString("ONNXRUNTIME_SHARED_LIBRARY_PATH", ""), "path to ONNX Runtime shared library")
 	pngFix := flag.Bool("png-fix", envBool("GODDDDOCR_PNG_FIX", false), "composite transparent PNGs over a white background")
 	workers := flag.Int("workers", envInt("GODDDDOCR_WORKERS", 1), "number of OCR sessions to keep in the worker pool")
@@ -42,6 +46,10 @@ func main() {
 
 	ocr, err := goddddocr.NewOCRPool(goddddocr.Config{
 		Model:             goddddocr.Model(*model),
+		ModelPath:         *modelPath,
+		CharsetPath:       *charsetPath,
+		InputName:         *inputName,
+		OutputName:        *outputName,
 		SharedLibraryPath: *ortLib,
 		PNGFix:            *pngFix,
 	}, *workers)
@@ -74,12 +82,19 @@ func main() {
 		}
 	}()
 
-	logServiceEvent(logger, logFormat, "server_started", map[string]any{
+	startFields := map[string]any{
 		"addr":       *addr,
 		"model":      ocr.Model(),
 		"workers":    ocr.Size(),
 		"log_format": logFormat,
-	})
+	}
+	if strings.TrimSpace(*modelPath) != "" {
+		startFields["model_path"] = *modelPath
+	}
+	if strings.TrimSpace(*charsetPath) != "" {
+		startFields["charset_path"] = *charsetPath
+	}
+	logServiceEvent(logger, logFormat, "server_started", startFields)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logServiceEvent(logger, logFormat, "server_failed", map[string]any{"error": err.Error()})
 		os.Exit(1)

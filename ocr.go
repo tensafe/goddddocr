@@ -17,12 +17,17 @@ import (
 type Model string
 
 const (
-	ModelOld  Model = "old"
-	ModelBeta Model = "beta"
+	ModelOld    Model = "old"
+	ModelBeta   Model = "beta"
+	ModelCustom Model = "custom"
 )
 
 type Config struct {
 	Model             Model
+	ModelPath         string
+	CharsetPath       string
+	InputName         string
+	OutputName        string
 	SharedLibraryPath string
 	PNGFix            bool
 }
@@ -101,45 +106,38 @@ type OCR struct {
 }
 
 func NewOCR(config Config) (*OCR, error) {
-	model := config.Model
-	if model == "" {
-		model = ModelOld
-	}
-	if model != ModelOld && model != ModelBeta {
-		return nil, fmt.Errorf("unsupported model %q", model)
+	resolved, err := resolveOCRConfig(config)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := InitRuntime(config.SharedLibraryPath); err != nil {
 		return nil, err
 	}
 
-	modelPath := "assets/models/common_old.onnx"
-	if model == ModelBeta {
-		modelPath = "assets/models/common.onnx"
-	}
-	modelData, err := embeddedFiles.ReadFile(modelPath)
+	modelData, modelSource, err := loadModelData(resolved.model, resolved.modelPath)
 	if err != nil {
-		return nil, fmt.Errorf("read model %q: %w", modelPath, err)
+		return nil, err
 	}
 
 	session, err := ort.NewDynamicAdvancedSessionWithONNXData(
 		modelData,
-		[]string{"input1"},
-		[]string{"387"},
+		[]string{resolved.inputName},
+		[]string{resolved.outputName},
 		nil,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create ONNX session: %w", err)
+		return nil, fmt.Errorf("create ONNX session from %s: %w", modelSource, err)
 	}
 
-	chars, err := loadCharset(model)
+	chars, err := loadCharset(resolved.model, resolved.charsetPath)
 	if err != nil {
 		_ = session.Destroy()
 		return nil, err
 	}
 
 	return &OCR{
-		model:   model,
+		model:   resolved.model,
 		chars:   chars,
 		pngFix:  config.PNGFix,
 		session: session,

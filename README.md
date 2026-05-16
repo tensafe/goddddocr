@@ -47,6 +47,10 @@ CLI flags can be supplied directly or through environment variables:
 |---|---|---|
 | `-addr` | `GODDDDOCR_ADDR` | `:8088` |
 | `-model` | `GODDDDOCR_MODEL` | `old` |
+| `-model-path` | `GODDDDOCR_MODEL_PATH` | empty |
+| `-charset-path` | `GODDDDOCR_CHARSET_PATH` | empty |
+| `-input-name` | `GODDDDOCR_INPUT_NAME` | `input1` |
+| `-output-name` | `GODDDDOCR_OUTPUT_NAME` | `387` |
 | `-png-fix` | `GODDDDOCR_PNG_FIX` | `false` |
 | `-workers` | `GODDDDOCR_WORKERS` | `1` |
 | `-log-format` | `GODDDDOCR_LOG_FORMAT` | `text` |
@@ -57,6 +61,19 @@ CLI flags can be supplied directly or through environment variables:
 `-workers=N` creates N independent OCR sessions behind the HTTP service. Start
 with `1`, then increase gradually after checking `/metrics` latency and memory.
 Use `-log-format json` for one-JSON-object-per-line service and access logs.
+
+Use `-model old` or `-model beta` for the embedded ddddocr OCR models. To load
+an external OCR model, provide both `-model-path` and `-charset-path`; the
+service reports the active model as `custom`. Custom charset files are JSON
+arrays whose first entry must be the CTC blank token, usually an empty string:
+
+```json
+["", "0", "1", "2", "a", "b"]
+```
+
+Most ddddocr-compatible ONNX OCR models use input `input1` and output `387`.
+If your exported model uses different tensor names, pass `-input-name` and
+`-output-name`.
 
 Endpoints:
 

@@ -42,7 +42,7 @@
   - Acceptance: caller can opt in for debugging parity with Python.
 - [x] Add HSV color filtering.
   - Acceptance: supports common presets such as red, blue, green, yellow, black, white, gray.
-- [ ] Add custom ONNX + charset config.
+- [x] Add custom ONNX + charset config.
   - Acceptance: caller can load external model and charset metadata.
 
 ## P3: Deployment And Packaging
