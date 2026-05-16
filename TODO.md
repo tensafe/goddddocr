@@ -59,6 +59,8 @@
   - Acceptance: `NOTICE` identifies ddddocr as the model/charset source.
 - [x] Add local deployment doctor.
   - Acceptance: `go run ./cmd/ocrdoctor` validates ONNX Runtime, model config, charset, and optional sample OCR without starting HTTP.
+- [x] Add release smoke scripts around `ocrdoctor`.
+  - Acceptance: macOS/Linux shell and Windows PowerShell scripts can run the same sample OCR check from source or release packages.
 - [ ] Decide asset strategy before publishing.
   - Acceptance: choose Git LFS, release assets, or embedded models for distribution.
 - [ ] Verify native builds on Windows, Linux, and macOS.
@@ -99,5 +101,5 @@
 1. Expand Python-vs-Go golden fixtures with more real captcha samples.
 2. Add Python-generated expected output for `ModelBeta` fixtures.
 3. Verify Linux Docker build end to end.
-4. Add Windows/macOS/Linux release smoke scripts around `ocrdoctor`.
+4. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.
 5. Record baseline load-test results for `workers=1/2/4`.

@@ -25,6 +25,13 @@ optionally one sample OCR result without starting HTTP:
 ```bash
 go run ./cmd/ocrdoctor -image samples/yzm1.png -expect 3n3d
 go run ./cmd/ocrdoctor -json
+scripts/smoke.sh
+```
+
+On Windows, use PowerShell:
+
+```powershell
+.\scripts\smoke.ps1
 ```
 
 ## Go Client
@@ -94,6 +101,18 @@ go run ./cmd/ocrdoctor \
   -image /opt/models/smoke.png \
   -expect abcd \
   -json
+```
+
+The release smoke scripts wrap the same doctor command. They first try
+`GODDDDOCR_DOCTOR_BIN`, then a local `ocrdoctor` binary, then `ocrdoctor` from
+`PATH`, and finally `go run ./cmd/ocrdoctor` when running from a source checkout.
+Use `GODDDDOCR_SMOKE_IMAGE` and `GODDDDOCR_SMOKE_EXPECT` to point them at a
+deployment-specific captcha sample:
+
+```bash
+GODDDDOCR_SMOKE_IMAGE=/opt/models/smoke.png \
+GODDDDOCR_SMOKE_EXPECT=abcd \
+scripts/smoke.sh
 ```
 
 Endpoints:

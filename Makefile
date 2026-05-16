@@ -1,4 +1,4 @@
-.PHONY: test server ort doctor
+.PHONY: test server ort doctor smoke
 
 test:
 	go test ./...
@@ -11,3 +11,6 @@ ort:
 
 doctor:
 	go run ./cmd/ocrdoctor -image samples/yzm1.png -expect 3n3d
+
+smoke:
+	scripts/smoke.sh
