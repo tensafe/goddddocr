@@ -1,8 +1,7 @@
-goddddocr includes OCR model and charset assets derived from:
+goddddocr includes OCR, detection model, and charset assets derived from:
 
   ddddocr
   https://github.com/sml2h3/ddddocr
 
 The upstream project is distributed under the MIT License. Keep this notice
 with binary or source distributions that include those assets.
-

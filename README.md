@@ -176,6 +176,25 @@ OCR preprocessing. Presets match ddddocr's HSV ranges: `red`, `blue`, `green`,
 `color_filter_custom_ranges` accepts HSV ranges in OpenCV scale
 `[[lower_hsv], [upper_hsv]]`, where H is `0..180` and S/V are `0..255`.
 
+## Detection API
+
+The Go module includes the embedded ddddocr detection model and exposes a
+library-level detector:
+
+```go
+det, err := goddddocr.NewDetector(goddddocr.DetectionConfig{})
+if err != nil {
+    return err
+}
+defer det.Close()
+
+boxes, err := det.DetectBytes(imageBytes)
+```
+
+`DetectBytes` returns Python-compatible boxes as `[][]int`, where each box is
+`[x1, y1, x2, y2]`. `DetectBytesDetailed` also returns score and class id.
+The HTTP detection endpoint is still planned.
+
 `GET /metrics` returns service counters and latency aggregates as JSON:
 
 ```json
@@ -396,5 +415,5 @@ GODDDDOCR_PREP_MAX_RMSE=0.02 \
 
 - OCR classification: implemented.
 - HTTP service: `/health`, `/ocr`, `/ocr/file`.
-- Detection and slide matching: planned, will require OpenCV/GoCV-compatible
-  image processing.
+- Detection: module API implemented; HTTP endpoint planned.
+- Slide matching: planned.

@@ -107,8 +107,10 @@
 
 ## P5: Full ddddocr Migration
 
-- [ ] Port object detection.
-  - Acceptance: `common_det.onnx` inference and NMS return bounding boxes compatible with Python.
+- [x] Port object detection core.
+  - Acceptance: `common_det.onnx` inference and NMS return bounding boxes compatible with Python from the Go module API.
+- [ ] Add HTTP endpoint for object detection.
+  - Acceptance: `/det` accepts base64 JSON and returns Python-compatible bounding boxes.
 - [ ] Port slide comparison.
   - Acceptance: diff-based gap location works without Python.
 - [ ] Port slide match.
@@ -120,8 +122,8 @@
 
 ## Recommended Next Batch
 
-1. Install Pillow in a dev environment and run `make prep-compare`.
-2. Run thresholded preprocessing checks on private samples and document acceptable PIL rounding differences.
-3. Expand Python-vs-Go golden fixtures with more real captcha samples.
-4. Add Python-generated expected output for `ModelBeta` fixtures.
+1. Add `/det` and `/det/file` endpoints around the Go detection core.
+2. Add detection golden fixtures against Python ddddocr.
+3. Start slide comparison with pure-Go image operations.
+4. Run thresholded preprocessing checks on private OCR samples.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.
