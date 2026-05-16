@@ -55,6 +55,8 @@
   - Acceptance: image builds the service and includes Linux ONNX Runtime.
 - [x] Add docker compose skeleton.
   - Acceptance: `docker compose up --build` starts a service with healthcheck.
+- [x] Add Docker smoke test script.
+  - Acceptance: script builds the image, starts a temporary container, waits for `/ready`, and checks sample OCR.
 - [x] Add upstream asset notice.
   - Acceptance: `NOTICE` identifies ddddocr as the model/charset source.
 - [x] Add local deployment doctor.
@@ -100,6 +102,6 @@
 
 1. Expand Python-vs-Go golden fixtures with more real captcha samples.
 2. Add Python-generated expected output for `ModelBeta` fixtures.
-3. Verify Linux Docker build end to end.
+3. Verify Linux Docker build end to end on a clean host.
 4. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.
 5. Record baseline load-test results for `workers=1/2/4`.

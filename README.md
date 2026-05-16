@@ -250,6 +250,18 @@ docker compose up --build
 
 The container exposes `8088` and uses `/ready` for health checks.
 
+For a full Docker smoke test, build the image, start a temporary container, wait
+for `/ready`, and classify the bundled sample:
+
+```bash
+scripts/docker_smoke.sh
+```
+
+Set `GODDDDOCR_DOCKER_PORT`, `GODDDDOCR_SMOKE_IMAGE`, and
+`GODDDDOCR_SMOKE_EXPECT` when the default `18088` port or bundled sample is not
+appropriate. Set `GODDDDOCR_DOCKER_PLATFORM=linux/amd64` or `linux/arm64` to
+force a target platform.
+
 ## Golden OCR Fixtures
 
 `fixtures/ocr_golden.json` records Python ddddocr outputs for sample images and

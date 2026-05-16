@@ -1,12 +1,22 @@
 FROM golang:1.24-bookworm AS build
 
+ARG TARGETOS
+ARG TARGETARCH
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go run ./cmd/ortfetch -goos linux -goarch amd64
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /out/goddddocr-server ./cmd/goddddocr-server
+RUN targetos="${TARGETOS:-linux}" \
+  && targetarch="${TARGETARCH:-$(go env GOARCH)}" \
+  && go run ./cmd/ortfetch -goos "$targetos" -goarch "$targetarch"
+RUN targetos="${TARGETOS:-linux}" \
+  && targetarch="${TARGETARCH:-$(go env GOARCH)}" \
+  && CGO_ENABLED=1 GOOS="$targetos" GOARCH="$targetarch" go build -o /out/goddddocr-server ./cmd/goddddocr-server
+RUN targetos="${TARGETOS:-linux}" \
+  && targetarch="${TARGETARCH:-$(go env GOARCH)}" \
+  && cp "/src/third_party/onnxruntime/${targetos}_${targetarch}/libonnxruntime.so" /out/libonnxruntime.so
 
 FROM debian:bookworm-slim
 
@@ -16,9 +26,9 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /out/goddddocr-server /usr/local/bin/goddddocr-server
-COPY --from=build /src/third_party/onnxruntime/linux_amd64/libonnxruntime.so /app/third_party/onnxruntime/linux_amd64/libonnxruntime.so
+COPY --from=build /out/libonnxruntime.so /app/third_party/onnxruntime/libonnxruntime.so
 
-ENV ONNXRUNTIME_SHARED_LIBRARY_PATH=/app/third_party/onnxruntime/linux_amd64/libonnxruntime.so
+ENV ONNXRUNTIME_SHARED_LIBRARY_PATH=/app/third_party/onnxruntime/libonnxruntime.so
 EXPOSE 8088
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
