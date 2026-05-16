@@ -25,6 +25,8 @@
   - Acceptance: differences from PIL resize/grayscale/alpha handling are documented or fixed.
 - [x] Add preprocessing debug export.
   - Acceptance: Go preprocessing can export grayscale model input, pixel matrix, and JSON metadata for Python/PIL comparison.
+- [x] Add preprocessing reference comparison.
+  - Acceptance: Go preprocessing can compare against reference PNG/CSV exports and report pixel-level diff statistics.
 - [x] Add beta model golden tests.
   - Acceptance: `ModelBeta` has at least one fixture and regression test.
 - [ ] Add real tsplay captcha samples.

@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/csv"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,6 +52,75 @@ func TestWriteMatrixCSV(t *testing.T) {
 	}
 	if len(rows) != 2 || rows[0][0] != "1" || rows[1][1] != "4" {
 		t.Fatalf("unexpected rows: %#v", rows)
+	}
+}
+
+func TestReadMatrixCSV(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "matrix.csv")
+	if err := os.WriteFile(path, []byte("1,2\n3,4\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pixels, width, height, err := readMatrixCSV(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if width != 2 || height != 2 {
+		t.Fatalf("dimensions = %dx%d", width, height)
+	}
+	if len(pixels) != 4 || pixels[0] != 1 || pixels[3] != 4 {
+		t.Fatalf("unexpected pixels: %#v", pixels)
+	}
+}
+
+func TestReadGrayPNG(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gray.png")
+	img := image.NewGray(image.Rect(0, 0, 2, 1))
+	img.SetGray(0, 0, color.Gray{Y: 7})
+	img.SetGray(1, 0, color.Gray{Y: 9})
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, img); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	pixels, width, height, err := readGrayPNG(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if width != 2 || height != 1 || len(pixels) != 2 || pixels[0] != 7 || pixels[1] != 9 {
+		t.Fatalf("unexpected png read: %dx%d %#v", width, height, pixels)
+	}
+}
+
+func TestComparePixels(t *testing.T) {
+	report, err := comparePixels([]uint8{10, 20, 30}, []uint8{10, 18, 33})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.ExactMatch {
+		t.Fatal("expected non-exact match")
+	}
+	if report.DifferentPixels != 2 || report.MaxAbsDiff != 3 {
+		t.Fatalf("unexpected diff report: %#v", report)
+	}
+	if report.MeanAbsDiff != 1.667 || report.RMSE != 2.082 {
+		t.Fatalf("unexpected diff stats: %#v", report)
+	}
+	if report.ReferenceSHA256 == "" {
+		t.Fatal("expected reference hash")
+	}
+}
+
+func TestCompareReferenceRejectsBothReferenceTypes(t *testing.T) {
+	_, err := compareReference(prepConfig{ComparePNGPath: "a.png", CompareCSVPath: "b.csv"}, []uint8{1}, 1, 1)
+	if err == nil {
+		t.Fatal("expected mutually-exclusive reference error")
 	}
 }
 
