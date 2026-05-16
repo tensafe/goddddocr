@@ -1,4 +1,4 @@
-.PHONY: test server ort doctor smoke docker-smoke
+.PHONY: test server ort doctor smoke docker-smoke bench-workers
 
 test:
 	go test ./...
@@ -17,3 +17,6 @@ smoke:
 
 docker-smoke:
 	scripts/docker_smoke.sh
+
+bench-workers:
+	scripts/bench_workers.sh

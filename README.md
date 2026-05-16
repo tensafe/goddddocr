@@ -200,6 +200,24 @@ go run ./cmd/ocrbench -url http://127.0.0.1:8088 \
 Run the same image and request count with `-workers 1`, `2`, and `4`, then
 compare QPS, p50, p95, p99, errors, and `/metrics` output.
 
+For a repeatable worker sweep, use:
+
+```bash
+scripts/bench_workers.sh
+```
+
+By default this tests `workers=1 2 4 8`, sends 100 requests at concurrency 4,
+and writes JSON results, server logs, metrics snapshots, and a Markdown summary
+with server RSS memory under `/tmp/goddddocr-bench-*`. Useful overrides:
+
+```bash
+GODDDDOCR_BENCH_WORKERS="1 2 4 8" \
+GODDDDOCR_BENCH_REQUESTS=200 \
+GODDDDOCR_BENCH_CONCURRENCY=8 \
+GODDDDOCR_BENCH_OUT=/tmp/goddddocr-baseline \
+scripts/bench_workers.sh
+```
+
 ## ONNX Runtime
 
 The code is portable across Windows, macOS, and Linux. The only platform-native
