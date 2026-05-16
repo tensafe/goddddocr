@@ -3,6 +3,7 @@ package goddddocr
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -95,6 +96,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /ocr/file", s.handleOCRFile)
 	mux.HandleFunc("POST /det", s.handleDetection)
 	mux.HandleFunc("POST /det/file", s.handleDetectionFile)
+	mux.HandleFunc("POST /slide_comparison", s.handleSlideComparison)
+	mux.HandleFunc("POST /slide-comparison", s.handleSlideComparison)
+	mux.HandleFunc("POST /slide_comparison/file", s.handleSlideComparisonFile)
+	mux.HandleFunc("POST /slide-comparison/file", s.handleSlideComparisonFile)
 	return s.accessLog(s.requestID(mux))
 }
 
@@ -107,6 +112,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		payload["model"] = s.ocr.Model()
 	}
 	payload["detection"] = s.detector != nil
+	payload["slide_comparison"] = true
 	writeJSON(w, r, http.StatusOK, payload)
 }
 
@@ -122,6 +128,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		payload["model"] = s.ocr.Model()
 	}
 	payload["detection"] = s.detector != nil
+	payload["slide_comparison"] = true
 	writeJSON(w, r, http.StatusOK, payload)
 }
 
@@ -164,6 +171,17 @@ type detectionResponse struct {
 	Boxes            []DetectionBox `json:"boxes,omitempty"`
 	ProcessingTimeMS float64        `json:"processing_time_ms"`
 	RequestID        string         `json:"request_id,omitempty"`
+}
+
+type slideComparisonRequest struct {
+	TargetImage     string `json:"target_image"`
+	BackgroundImage string `json:"background_image"`
+}
+
+type slideComparisonResponse struct {
+	Result           SlideResult `json:"result"`
+	ProcessingTimeMS float64     `json:"processing_time_ms"`
+	RequestID        string      `json:"request_id,omitempty"`
 }
 
 func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
@@ -433,6 +451,112 @@ func (s *Server) writeDetectionResult(w http.ResponseWriter, r *http.Request, da
 	writeJSON(w, r, http.StatusOK, resp)
 }
 
+func (s *Server) handleSlideComparison(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	defer r.Body.Close()
+
+	var req slideComparisonRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", fmt.Sprintf("request exceeds %d bytes", s.maxBodyBytes))
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return
+	}
+
+	targetData, backgroundData, ok := s.decodeSlideComparisonRequest(w, r, req)
+	if !ok {
+		return
+	}
+	s.writeSlideComparisonResult(w, r, targetData, backgroundData)
+}
+
+func (s *Server) handleSlideComparisonFile(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	defer r.Body.Close()
+
+	if err := r.ParseMultipartForm(s.maxBodyBytes); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", fmt.Sprintf("request exceeds %d bytes", s.maxBodyBytes))
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_multipart", "invalid multipart form")
+		return
+	}
+
+	targetData, err := readMultipartImage(r, s.maxImageBytes, "target_file", "target_image", "target")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			writeError(w, r, http.StatusBadRequest, "missing_target_image", "target image file is required")
+			return
+		}
+		writeError(w, r, http.StatusRequestEntityTooLarge, "target_image_too_large", err.Error())
+		return
+	}
+	backgroundData, err := readMultipartImage(r, s.maxImageBytes, "background_file", "background_image", "background")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			writeError(w, r, http.StatusBadRequest, "missing_background_image", "background image file is required")
+			return
+		}
+		writeError(w, r, http.StatusRequestEntityTooLarge, "background_image_too_large", err.Error())
+		return
+	}
+
+	s.writeSlideComparisonResult(w, r, targetData, backgroundData)
+}
+
+func (s *Server) decodeSlideComparisonRequest(w http.ResponseWriter, r *http.Request, req slideComparisonRequest) ([]byte, []byte, bool) {
+	if strings.TrimSpace(req.TargetImage) == "" {
+		writeError(w, r, http.StatusBadRequest, "missing_target_image", "target_image is required")
+		return nil, nil, false
+	}
+	if strings.TrimSpace(req.BackgroundImage) == "" {
+		writeError(w, r, http.StatusBadRequest, "missing_background_image", "background_image is required")
+		return nil, nil, false
+	}
+
+	targetData, err := decodeBase64Image(req.TargetImage)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_target_image", err.Error())
+		return nil, nil, false
+	}
+	if int64(len(targetData)) > s.maxImageBytes {
+		writeError(w, r, http.StatusRequestEntityTooLarge, "target_image_too_large", fmt.Sprintf("target image exceeds %d bytes", s.maxImageBytes))
+		return nil, nil, false
+	}
+
+	backgroundData, err := decodeBase64Image(req.BackgroundImage)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_background_image", err.Error())
+		return nil, nil, false
+	}
+	if int64(len(backgroundData)) > s.maxImageBytes {
+		writeError(w, r, http.StatusRequestEntityTooLarge, "background_image_too_large", fmt.Sprintf("background image exceeds %d bytes", s.maxImageBytes))
+		return nil, nil, false
+	}
+
+	return targetData, backgroundData, true
+}
+
+func (s *Server) writeSlideComparisonResult(w http.ResponseWriter, r *http.Request, targetData []byte, backgroundData []byte) {
+	start := time.Now()
+	result, err := SlideComparisonBytes(targetData, backgroundData)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "slide_comparison_failed", err.Error())
+		return
+	}
+
+	writeJSON(w, r, http.StatusOK, slideComparisonResponse{
+		Result:           *result,
+		ProcessingTimeMS: float64(time.Since(start).Microseconds()) / 1000.0,
+		RequestID:        requestIDFrom(r),
+	})
+}
+
 func decodeBase64Image(value string) ([]byte, error) {
 	value = strings.TrimSpace(value)
 	if idx := strings.Index(value, ","); strings.HasPrefix(value, "data:") && idx >= 0 {
@@ -446,6 +570,25 @@ func decodeBase64Image(value string) ([]byte, error) {
 		return nil, fmt.Errorf("image is empty")
 	}
 	return data, nil
+}
+
+func readMultipartImage(r *http.Request, maxBytes int64, fieldNames ...string) ([]byte, error) {
+	var formErr error
+	for _, fieldName := range fieldNames {
+		file, _, err := r.FormFile(fieldName)
+		if err != nil {
+			if !errors.Is(err, http.ErrMissingFile) && formErr == nil {
+				formErr = err
+			}
+			continue
+		}
+		defer file.Close()
+		return readLimited(file, maxBytes)
+	}
+	if formErr != nil {
+		return nil, formErr
+	}
+	return nil, http.ErrMissingFile
 }
 
 func readLimited(src io.Reader, maxBytes int64) ([]byte, error) {

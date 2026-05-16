@@ -134,6 +134,53 @@ func TestOCRClientDetectBytes(t *testing.T) {
 	}
 }
 
+func TestOCRClientSlideComparisonBytes(t *testing.T) {
+	target := []byte("target-image")
+	background := []byte("background-image")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/slide_comparison" {
+			http.NotFound(w, r)
+			return
+		}
+		var req slideComparisonRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		gotTarget, err := base64.StdEncoding.DecodeString(req.TargetImage)
+		if err != nil {
+			t.Fatalf("decode target: %v", err)
+		}
+		gotBackground, err := base64.StdEncoding.DecodeString(req.BackgroundImage)
+		if err != nil {
+			t.Fatalf("decode background: %v", err)
+		}
+		if string(gotTarget) != string(target) {
+			t.Fatalf("target mismatch: got %q, want %q", gotTarget, target)
+		}
+		if string(gotBackground) != string(background) {
+			t.Fatalf("background mismatch: got %q, want %q", gotBackground, background)
+		}
+		writeJSON(w, r, http.StatusOK, slideComparisonResponse{
+			Result:           SlideResult{Target: []int{42, 18}, TargetX: 42, TargetY: 18},
+			ProcessingTimeMS: 0.75,
+			RequestID:        "slide-1",
+		})
+	}))
+	defer server.Close()
+
+	client := NewOCRClient(server.URL)
+	result, err := client.SlideComparisonBytes(context.Background(), target, background)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Result.TargetX != 42 || result.Result.TargetY != 18 {
+		t.Fatalf("unexpected slide result: %#v", result.Result)
+	}
+	if result.RequestID != "slide-1" {
+		t.Fatalf("request id mismatch: got %q", result.RequestID)
+	}
+}
+
 func TestOCRClientRemoteError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_image", "image must be valid base64")

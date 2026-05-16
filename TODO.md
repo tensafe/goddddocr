@@ -111,19 +111,21 @@
   - Acceptance: `common_det.onnx` inference and NMS return bounding boxes compatible with Python from the Go module API.
 - [x] Add HTTP endpoint for object detection.
   - Acceptance: `/det` accepts base64 JSON and returns Python-compatible bounding boxes.
-- [ ] Port slide comparison.
+- [x] Port slide comparison.
   - Acceptance: diff-based gap location works without Python.
 - [ ] Port slide match.
   - Acceptance: template/edge matching returns target coordinates compatible with Python.
-- [ ] Decide GoCV vs pure-Go image ops.
-  - Acceptance: choose based on deployment weight and accuracy.
-- [ ] Add HTTP endpoints for detection and slide features.
+- [x] Decide GoCV vs pure-Go image ops for slide comparison.
+  - Acceptance: use pure-Go image operations to keep Windows/macOS/Linux packaging light.
+- [x] Add HTTP endpoint for slide comparison.
+  - Acceptance: `/slide_comparison` and `/slide-comparison` are documented and tested.
+- [ ] Add HTTP endpoint for slide match.
   - Acceptance: API shape is documented and tested.
 
 ## Recommended Next Batch
 
 1. Add detection golden fixtures against Python ddddocr.
-2. Start slide comparison with pure-Go image operations.
-3. Document tsplay flow usage for `/det`.
-4. Run thresholded preprocessing checks on private OCR samples.
+2. Port slide match simple template matching, then edge-based matching.
+3. Add Python golden fixtures for slide comparison and slide match.
+4. Document tsplay flow usage for `/det` and `/slide_comparison`.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.

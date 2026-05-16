@@ -147,6 +147,10 @@ Endpoints:
 - `POST /ocr/file`
 - `POST /det`
 - `POST /det/file`
+- `POST /slide_comparison`
+- `POST /slide-comparison`
+- `POST /slide_comparison/file`
+- `POST /slide-comparison/file`
 
 `POST /ocr` accepts:
 
@@ -223,6 +227,46 @@ boxes, err := det.DetectBytes(imageBytes)
 ```
 
 `DetectBytesDetailed` returns score and class id.
+
+## Slide Comparison API
+
+The diff-based ddddocr slide comparison path is pure Go and does not require
+ONNX Runtime. It is available whenever the HTTP service is running:
+
+```bash
+curl -s -X POST http://127.0.0.1:8088/slide_comparison \
+  -H 'content-type: application/json' \
+  -d "{\"target_image\":\"$(base64 -i target.png)\",\"background_image\":\"$(base64 -i background.png)\"}"
+```
+
+`POST /slide_comparison` and the original hyphenated alias
+`POST /slide-comparison` accept:
+
+```json
+{
+  "target_image": "base64-encoded-image-with-gap",
+  "background_image": "base64-encoded-complete-background"
+}
+```
+
+The response keeps ddddocr's result shape:
+
+```json
+{
+  "result": {
+    "target": [51, 32],
+    "target_x": 51,
+    "target_y": 32
+  }
+}
+```
+
+The HTTP client exposes the same endpoint:
+
+```go
+result, err := client.SlideComparisonBytes(ctx, targetImageBytes, backgroundImageBytes)
+fmt.Println(result.Result.Target)
+```
 
 `GET /metrics` returns service counters and latency aggregates as JSON:
 
@@ -443,6 +487,7 @@ GODDDDOCR_PREP_MAX_RMSE=0.02 \
 ## Status
 
 - OCR classification: implemented.
-- HTTP service: `/health`, `/ocr`, `/ocr/file`, `/det`, `/det/file`.
+- HTTP service: `/health`, `/ocr`, `/ocr/file`, `/det`, `/det/file`, `/slide_comparison`.
 - Detection: module and HTTP API implemented.
+- Slide comparison: module and HTTP API implemented.
 - Slide matching: planned.

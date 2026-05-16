@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -218,6 +219,127 @@ func TestServerDetectionEndpointNotReady(t *testing.T) {
 
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("det status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestServerSlideComparisonEndpoint(t *testing.T) {
+	target, background := syntheticSlideImages()
+	payload, err := json.Marshal(slideComparisonRequest{
+		TargetImage:     base64.StdEncoding.EncodeToString(encodePNG(t, target)),
+		BackgroundImage: base64.StdEncoding.EncodeToString(encodePNG(t, background)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil))
+	req := httptest.NewRequest(http.MethodPost, "/slide_comparison", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("slide status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	var resp slideComparisonResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result.TargetX != 51 || resp.Result.TargetY != 32 {
+		t.Fatalf("target = %#v, want [51 32]", resp.Result)
+	}
+	if resp.RequestID == "" {
+		t.Fatal("request_id is empty")
+	}
+}
+
+func TestServerSlideComparisonEndpointAlias(t *testing.T) {
+	target, background := syntheticSlideImages()
+	payload, err := json.Marshal(slideComparisonRequest{
+		TargetImage:     base64.StdEncoding.EncodeToString(encodePNG(t, target)),
+		BackgroundImage: base64.StdEncoding.EncodeToString(encodePNG(t, background)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil))
+	req := httptest.NewRequest(http.MethodPost, "/slide-comparison", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("slide alias status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestServerSlideComparisonEndpointMissingBackground(t *testing.T) {
+	target, _ := syntheticSlideImages()
+	payload, err := json.Marshal(slideComparisonRequest{
+		TargetImage: base64.StdEncoding.EncodeToString(encodePNG(t, target)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil))
+	req := httptest.NewRequest(http.MethodPost, "/slide_comparison", bytes.NewReader(payload))
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("slide status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	var resp errorResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Error.Code != "missing_background_image" {
+		t.Fatalf("error code = %q", resp.Error.Code)
+	}
+}
+
+func TestServerSlideComparisonFileEndpoint(t *testing.T) {
+	target, background := syntheticSlideImages()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writeMultipartImage(t, writer, "target_file", "target.png", encodePNG(t, target))
+	writeMultipartImage(t, writer, "background_file", "background.png", encodePNG(t, background))
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil))
+	req := httptest.NewRequest(http.MethodPost, "/slide_comparison/file", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("slide file status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	var resp slideComparisonResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result.TargetX != 51 || resp.Result.TargetY != 32 {
+		t.Fatalf("target = %#v, want [51 32]", resp.Result)
+	}
+}
+
+func writeMultipartImage(t *testing.T, writer *multipart.Writer, fieldName string, fileName string, data []byte) {
+	t.Helper()
+	part, err := writer.CreateFormFile(fieldName, fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(data); err != nil {
+		t.Fatal(err)
 	}
 }
 
