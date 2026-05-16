@@ -31,6 +31,8 @@
   - Acceptance: Go preprocessing can write a diff PNG that highlights where Go and reference preprocessing diverge.
 - [x] Add Python/Pillow preprocessing reference exporter.
   - Acceptance: migration checks can generate CSV/PNG/JSON references for `ocrprep` without adding a runtime Python dependency.
+- [x] Add repeatable preprocessing comparison workflow.
+  - Acceptance: one command can generate Python references, Go outputs, JSON reports, and visual diffs for one or more samples.
 - [x] Add beta model golden tests.
   - Acceptance: `ModelBeta` has at least one fixture and regression test.
 - [ ] Add real tsplay captcha samples.
@@ -114,8 +116,8 @@
 
 ## Recommended Next Batch
 
-1. Run Python/Pillow preprocessing reference export on bundled and private samples.
-2. Expand Python-vs-Go golden fixtures with more real captcha samples.
-3. Add Python-generated expected output for `ModelBeta` fixtures.
-4. Verify Linux Docker build end to end on a clean host.
+1. Install Pillow in a dev environment and run `make prep-compare`.
+2. Inspect `reports/preprocess/*/go.json` and `diff.png` to document or fix preprocessing mismatches.
+3. Expand Python-vs-Go golden fixtures with more real captcha samples.
+4. Add Python-generated expected output for `ModelBeta` fixtures.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.

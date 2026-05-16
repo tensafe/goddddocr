@@ -324,8 +324,8 @@ func comparePixels(actual []uint8, reference []uint8) (*diffReport, error) {
 		totalAbsDiff += float64(diff)
 		totalSquaredDiff += float64(diff * diff)
 	}
-	report.MeanAbsDiff = math.Round((totalAbsDiff/float64(len(actual)))*1000) / 1000
-	report.RMSE = math.Round(math.Sqrt(totalSquaredDiff/float64(len(actual)))*1000) / 1000
+	report.MeanAbsDiff = roundFloat(totalAbsDiff/float64(len(actual)), 6)
+	report.RMSE = roundFloat(math.Sqrt(totalSquaredDiff/float64(len(actual))), 6)
 	return report, nil
 }
 
@@ -368,6 +368,11 @@ func diffIntensity(delta int) uint8 {
 		intensity = 255
 	}
 	return uint8(intensity)
+}
+
+func roundFloat(value float64, places int) float64 {
+	scale := math.Pow10(places)
+	return math.Round(value*scale) / scale
 }
 
 func summarize(result *goddddocr.PreprocessResult, pixels []uint8) prepReport {

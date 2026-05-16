@@ -368,6 +368,21 @@ reference, and blue where Go preprocessing is brighter.
 exporting Python/Pillow reference files; the Go module, CLI, and HTTP service do
 not use Python at runtime.
 
+For a repeatable local comparison workflow, install Pillow in your Python
+environment and run:
+
+```bash
+make prep-compare
+# or compare private samples:
+GODDDDOCR_PREP_REPORT_DIR=reports/preprocess \
+  scripts/preprocess_compare.sh samples/local/*.png
+```
+
+The script writes per-sample Python references, Go preprocessing outputs,
+JSON reports, and diff PNGs under `reports/preprocess/`. It reports mismatches
+without failing by default; set `GODDDDOCR_PREP_FAIL_ON_DIFF=true` when you want
+CI-like failure on any preprocessing difference.
+
 ## Status
 
 - OCR classification: implemented.

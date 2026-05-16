@@ -1,4 +1,4 @@
-.PHONY: test server ort doctor smoke docker-smoke bench-workers eval-samples prep-sample python-prep-reference
+.PHONY: test server ort doctor smoke docker-smoke bench-workers eval-samples prep-sample python-prep-reference prep-compare
 
 test:
 	go test ./...
@@ -29,3 +29,6 @@ prep-sample:
 
 python-prep-reference:
 	python3 scripts/python_preprocess_reference.py -image samples/yzm1.png -out /tmp/python-preprocess.png -json /tmp/python-preprocess.json -matrix-csv /tmp/python-preprocess.csv
+
+prep-compare:
+	scripts/preprocess_compare.sh samples/yzm1.png

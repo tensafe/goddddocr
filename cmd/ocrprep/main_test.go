@@ -116,7 +116,7 @@ func TestComparePixels(t *testing.T) {
 	if report.DifferentPixels != 2 || report.MaxAbsDiff != 3 {
 		t.Fatalf("unexpected diff report: %#v", report)
 	}
-	if report.MeanAbsDiff != 1.667 || report.RMSE != 2.082 {
+	if report.MeanAbsDiff != 1.666667 || report.RMSE != 2.081666 {
 		t.Fatalf("unexpected diff stats: %#v", report)
 	}
 	if report.ReferenceSHA256 == "" {
