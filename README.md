@@ -223,6 +223,8 @@ GODDDDOCR_BENCH_OUT=/tmp/goddddocr-baseline \
 scripts/bench_workers.sh
 ```
 
+The current local baseline is recorded in `BENCHMARKS.md`.
+
 ## ONNX Runtime
 
 The code is portable across Windows, macOS, and Linux. The only platform-native

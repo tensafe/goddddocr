@@ -82,7 +82,7 @@
   - Acceptance: `go run ./cmd/ocrbench` reports QPS, p50/p95/p99 latency, errors, and mismatches.
 - [x] Add repeatable worker benchmark script.
   - Acceptance: one command runs `workers=1/2/4/8`, records per-run JSON, metrics, logs, and a summary.
-- [ ] Record baseline load-test results.
+- [x] Record baseline load-test results.
   - Acceptance: document QPS, p50/p95 latency, and memory on a standard machine.
 - [ ] Reduce per-request allocations.
   - Acceptance: benchmark shows lower allocations in preprocessing/inference.
