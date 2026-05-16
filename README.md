@@ -18,6 +18,15 @@ curl -s -X POST http://127.0.0.1:8088/ocr \
   -d "{\"image\":\"$(base64 -i samples/yzm1.png)\",\"confidence\":true}"
 ```
 
+Before wiring the service into tsplay, run the local doctor command on the
+target machine. It checks ONNX Runtime loading, model/charset configuration, and
+optionally one sample OCR result without starting HTTP:
+
+```bash
+go run ./cmd/ocrdoctor -image samples/yzm1.png -expect 3n3d
+go run ./cmd/ocrdoctor -json
+```
+
 ## Go Client
 
 tsplay should call the service over HTTP first, so cgo and ONNX Runtime stay
@@ -74,6 +83,18 @@ arrays whose first entry must be the CTC blank token, usually an empty string:
 Most ddddocr-compatible ONNX OCR models use input `input1` and output `387`.
 If your exported model uses different tensor names, pass `-input-name` and
 `-output-name`.
+
+The same model flags are accepted by `cmd/ocrdoctor`, so deployment scripts can
+validate a custom model before starting the long-running service:
+
+```bash
+go run ./cmd/ocrdoctor \
+  -model-path /opt/models/custom.onnx \
+  -charset-path /opt/models/charset.json \
+  -image /opt/models/smoke.png \
+  -expect abcd \
+  -json
+```
 
 Endpoints:
 
