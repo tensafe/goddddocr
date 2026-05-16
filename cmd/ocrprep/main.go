@@ -52,13 +52,27 @@ type prepReport struct {
 }
 
 type diffReport struct {
-	ReferenceSHA256 string  `json:"reference_sha256"`
-	ExactMatch      bool    `json:"exact_match"`
-	DifferentPixels int     `json:"different_pixels"`
-	MaxAbsDiff      int     `json:"max_abs_diff"`
-	MeanAbsDiff     float64 `json:"mean_abs_diff"`
-	RMSE            float64 `json:"rmse"`
+	ReferenceSHA256    string      `json:"reference_sha256"`
+	ExactMatch         bool        `json:"exact_match"`
+	DifferentPixels    int         `json:"different_pixels"`
+	DifferentPixelRate float64     `json:"different_pixel_rate"`
+	MaxAbsDiff         int         `json:"max_abs_diff"`
+	MeanAbsDiff        float64     `json:"mean_abs_diff"`
+	RMSE               float64     `json:"rmse"`
+	FirstDifferences   []pixelDiff `json:"first_differences,omitempty"`
 }
+
+type pixelDiff struct {
+	Index     int `json:"index"`
+	X         int `json:"x"`
+	Y         int `json:"y"`
+	Actual    int `json:"actual"`
+	Reference int `json:"reference"`
+	Delta     int `json:"delta"`
+	AbsDiff   int `json:"abs_diff"`
+}
+
+const maxDiffSamples = 20
 
 func main() {
 	config, err := parseFlags(os.Args[1:])
@@ -169,7 +183,7 @@ func run(config prepConfig) (prepReport, error) {
 		if referenceWidth != result.Width || referenceHeight != result.Height {
 			return prepReport{}, fmt.Errorf("reference dimensions %dx%d do not match Go preprocessing %dx%d", referenceWidth, referenceHeight, result.Width, result.Height)
 		}
-		diff, err := comparePixels(gray.Pix, reference)
+		diff, err := comparePixels(gray.Pix, reference, result.Width)
 		if err != nil {
 			return prepReport{}, err
 		}
@@ -223,7 +237,7 @@ func compareReference(config prepConfig, pixels []uint8, width int, height int) 
 	if referenceWidth != width || referenceHeight != height {
 		return nil, fmt.Errorf("reference dimensions %dx%d do not match Go preprocessing %dx%d", referenceWidth, referenceHeight, width, height)
 	}
-	return comparePixels(pixels, reference)
+	return comparePixels(pixels, reference, width)
 }
 
 func readReference(config prepConfig) ([]uint8, int, int, error) {
@@ -295,9 +309,12 @@ func readMatrixCSV(path string) ([]uint8, int, int, error) {
 	return pixels, width, len(rows), nil
 }
 
-func comparePixels(actual []uint8, reference []uint8) (*diffReport, error) {
+func comparePixels(actual []uint8, reference []uint8, width int) (*diffReport, error) {
 	if len(actual) != len(reference) {
 		return nil, fmt.Errorf("reference pixel count %d does not match actual %d", len(reference), len(actual))
+	}
+	if len(actual) > 0 && width <= 0 {
+		return nil, fmt.Errorf("width must be positive")
 	}
 	hash := sha256.Sum256(reference)
 	report := &diffReport{
@@ -310,20 +327,33 @@ func comparePixels(actual []uint8, reference []uint8) (*diffReport, error) {
 	var totalAbsDiff float64
 	var totalSquaredDiff float64
 	for idx := range actual {
-		diff := int(actual[idx]) - int(reference[idx])
-		if diff < 0 {
-			diff = -diff
+		delta := int(actual[idx]) - int(reference[idx])
+		absDiff := delta
+		if absDiff < 0 {
+			absDiff = -absDiff
 		}
-		if diff > 0 {
+		if absDiff > 0 {
 			report.ExactMatch = false
 			report.DifferentPixels++
+			if len(report.FirstDifferences) < maxDiffSamples {
+				report.FirstDifferences = append(report.FirstDifferences, pixelDiff{
+					Index:     idx,
+					X:         idx % width,
+					Y:         idx / width,
+					Actual:    int(actual[idx]),
+					Reference: int(reference[idx]),
+					Delta:     delta,
+					AbsDiff:   absDiff,
+				})
+			}
 		}
-		if diff > report.MaxAbsDiff {
-			report.MaxAbsDiff = diff
+		if absDiff > report.MaxAbsDiff {
+			report.MaxAbsDiff = absDiff
 		}
-		totalAbsDiff += float64(diff)
-		totalSquaredDiff += float64(diff * diff)
+		totalAbsDiff += float64(absDiff)
+		totalSquaredDiff += float64(absDiff * absDiff)
 	}
+	report.DifferentPixelRate = roundFloat(float64(report.DifferentPixels)/float64(len(actual)), 6)
 	report.MeanAbsDiff = roundFloat(totalAbsDiff/float64(len(actual)), 6)
 	report.RMSE = roundFloat(math.Sqrt(totalSquaredDiff/float64(len(actual))), 6)
 	return report, nil

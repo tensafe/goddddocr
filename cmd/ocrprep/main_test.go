@@ -106,7 +106,7 @@ func TestReadGrayPNG(t *testing.T) {
 }
 
 func TestComparePixels(t *testing.T) {
-	report, err := comparePixels([]uint8{10, 20, 30}, []uint8{10, 18, 33})
+	report, err := comparePixels([]uint8{10, 20, 30}, []uint8{10, 18, 33}, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,8 +119,42 @@ func TestComparePixels(t *testing.T) {
 	if report.MeanAbsDiff != 1.666667 || report.RMSE != 2.081666 {
 		t.Fatalf("unexpected diff stats: %#v", report)
 	}
+	if report.DifferentPixelRate != 0.666667 {
+		t.Fatalf("unexpected diff rate: %#v", report)
+	}
+	if len(report.FirstDifferences) != 2 {
+		t.Fatalf("first differences = %d, want 2", len(report.FirstDifferences))
+	}
+	if report.FirstDifferences[0].Index != 1 || report.FirstDifferences[0].X != 1 || report.FirstDifferences[0].Y != 0 {
+		t.Fatalf("unexpected first difference location: %#v", report.FirstDifferences[0])
+	}
+	if report.FirstDifferences[0].Actual != 20 || report.FirstDifferences[0].Reference != 18 || report.FirstDifferences[0].Delta != 2 || report.FirstDifferences[0].AbsDiff != 2 {
+		t.Fatalf("unexpected first difference values: %#v", report.FirstDifferences[0])
+	}
 	if report.ReferenceSHA256 == "" {
 		t.Fatal("expected reference hash")
+	}
+}
+
+func TestComparePixelsCapsFirstDifferences(t *testing.T) {
+	actual := make([]uint8, maxDiffSamples+3)
+	reference := make([]uint8, maxDiffSamples+3)
+	for i := range actual {
+		actual[i] = 1
+	}
+	report, err := comparePixels(actual, reference, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.DifferentPixels != maxDiffSamples+3 {
+		t.Fatalf("different pixels = %d, want %d", report.DifferentPixels, maxDiffSamples+3)
+	}
+	if len(report.FirstDifferences) != maxDiffSamples {
+		t.Fatalf("first differences = %d, want %d", len(report.FirstDifferences), maxDiffSamples)
+	}
+	last := report.FirstDifferences[len(report.FirstDifferences)-1]
+	if last.Index != maxDiffSamples-1 || last.X != 4 || last.Y != 3 {
+		t.Fatalf("unexpected last sampled difference: %#v", last)
 	}
 }
 

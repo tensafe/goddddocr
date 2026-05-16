@@ -78,20 +78,35 @@ with open(sys.argv[1], "r", encoding="utf-8") as fp:
     report = json.load(fp)
 diff = report.get("diff") or {}
 print(
-    "exact={exact} different_pixels={different} max_abs_diff={maxdiff} mean_abs_diff={mean} rmse={rmse}".format(
+    "exact={exact} different_pixels={different} different_pixel_rate={rate} max_abs_diff={maxdiff} mean_abs_diff={mean} rmse={rmse}".format(
         exact=str(diff.get("exact_match")).lower(),
         different=diff.get("different_pixels"),
+        rate=diff.get("different_pixel_rate"),
         maxdiff=diff.get("max_abs_diff"),
         mean=diff.get("mean_abs_diff"),
         rmse=diff.get("rmse"),
     )
 )
+first = (diff.get("first_differences") or [])[:1]
+if first:
+    point = first[0]
+    print(
+        "first_difference=x:{x} y:{y} actual:{actual} reference:{reference} delta:{delta}".format(
+            x=point.get("x"),
+            y=point.get("y"),
+            actual=point.get("actual"),
+            reference=point.get("reference"),
+            delta=point.get("delta"),
+        )
+    )
 if diff.get("exact_match") is not True:
     sys.exit(2)
 PY
   )" || compare_status=$?
   compare_status="${compare_status:-0}"
-  echo "    $summary"
+  while IFS= read -r line; do
+    echo "    $line"
+  done <<<"$summary"
   echo "    report: ${REPORT_DIR}/${safe_name}/go.json"
   echo "    diff:   ${REPORT_DIR}/${safe_name}/diff.png"
 
