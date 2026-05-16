@@ -35,6 +35,8 @@
   - Acceptance: one command can generate Python references, Go outputs, JSON reports, and visual diffs for one or more samples.
 - [x] Add preprocessing diff coordinate diagnostics.
   - Acceptance: JSON reports include sampled pixel coordinates and values for quick mismatch triage.
+- [x] Add preprocessing tolerance checks.
+  - Acceptance: local comparison workflow can fail only when pixel, max-diff, or RMSE thresholds are exceeded.
 - [x] Add beta model golden tests.
   - Acceptance: `ModelBeta` has at least one fixture and regression test.
 - [ ] Add real tsplay captcha samples.
@@ -119,7 +121,7 @@
 ## Recommended Next Batch
 
 1. Install Pillow in a dev environment and run `make prep-compare`.
-2. Inspect `reports/preprocess/*/go.json` sampled pixel differences and `diff.png` to document or fix preprocessing mismatches.
+2. Run thresholded preprocessing checks on private samples and document acceptable PIL rounding differences.
 3. Expand Python-vs-Go golden fixtures with more real captcha samples.
 4. Add Python-generated expected output for `ModelBeta` fixtures.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.

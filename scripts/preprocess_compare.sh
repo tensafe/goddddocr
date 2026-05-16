@@ -6,6 +6,14 @@ REPORT_DIR="${GODDDDOCR_PREP_REPORT_DIR:-reports/preprocess}"
 PYTHON_BIN="${GODDDDOCR_PREP_PYTHON:-python3}"
 PNG_FIX="${GODDDDOCR_PREP_PNG_FIX:-false}"
 FAIL_ON_DIFF="${GODDDDOCR_PREP_FAIL_ON_DIFF:-false}"
+MAX_DIFF_PIXELS="${GODDDDOCR_PREP_MAX_DIFF_PIXELS:-}"
+MAX_DIFF_RATE="${GODDDDOCR_PREP_MAX_DIFF_RATE:-}"
+MAX_ABS_DIFF="${GODDDDOCR_PREP_MAX_ABS_DIFF:-}"
+MAX_RMSE="${GODDDDOCR_PREP_MAX_RMSE:-}"
+export GODDDDOCR_PREP_MAX_DIFF_PIXELS="$MAX_DIFF_PIXELS"
+export GODDDDOCR_PREP_MAX_DIFF_RATE="$MAX_DIFF_RATE"
+export GODDDDOCR_PREP_MAX_ABS_DIFF="$MAX_ABS_DIFF"
+export GODDDDOCR_PREP_MAX_RMSE="$MAX_RMSE"
 
 if [[ "$#" -gt 0 ]]; then
   IMAGES=("$@")
@@ -72,7 +80,20 @@ for image in "${IMAGES[@]}"; do
 
   summary="$("$PYTHON_BIN" - "$go_json" <<'PY'
 import json
+import os
 import sys
+
+
+def env_float(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        print(f"invalid {name}={value!r}", file=sys.stderr)
+        sys.exit(4)
+
 
 with open(sys.argv[1], "r", encoding="utf-8") as fp:
     report = json.load(fp)
@@ -87,6 +108,21 @@ print(
         rmse=diff.get("rmse"),
     )
 )
+thresholds = {
+    "different_pixels": env_float("GODDDDOCR_PREP_MAX_DIFF_PIXELS"),
+    "different_pixel_rate": env_float("GODDDDOCR_PREP_MAX_DIFF_RATE"),
+    "max_abs_diff": env_float("GODDDDOCR_PREP_MAX_ABS_DIFF"),
+    "rmse": env_float("GODDDDOCR_PREP_MAX_RMSE"),
+}
+violations = []
+for key, limit in thresholds.items():
+    if limit is None:
+        continue
+    value = diff.get(key)
+    if value is None:
+        violations.append(f"{key}=missing > {limit:g}")
+    elif float(value) > limit:
+        violations.append(f"{key}={value} > {limit:g}")
 first = (diff.get("first_differences") or [])[:1]
 if first:
     point = first[0]
@@ -99,6 +135,10 @@ if first:
             delta=point.get("delta"),
         )
     )
+if violations:
+    for violation in violations:
+        print(f"threshold_violation={violation}")
+    sys.exit(3)
 if diff.get("exact_match") is not True:
     sys.exit(2)
 PY
@@ -110,11 +150,14 @@ PY
   echo "    report: ${REPORT_DIR}/${safe_name}/go.json"
   echo "    diff:   ${REPORT_DIR}/${safe_name}/diff.png"
 
-  if [[ "$compare_status" -ne 0 ]]; then
+  if [[ "$compare_status" -eq 2 ]]; then
     if [[ "$FAIL_ON_DIFF" == "1" || "$FAIL_ON_DIFF" == "true" ]]; then
       status=1
       break
     fi
+  elif [[ "$compare_status" -ne 0 ]]; then
+    status=1
+    break
   fi
   unset compare_status
 done

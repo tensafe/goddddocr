@@ -383,6 +383,14 @@ The script writes per-sample Python references, Go preprocessing outputs,
 JSON reports, and diff PNGs under `reports/preprocess/`. It reports mismatches
 without failing by default; set `GODDDDOCR_PREP_FAIL_ON_DIFF=true` when you want
 CI-like failure on any preprocessing difference.
+For tolerance-based checks, set one or more thresholds:
+
+```bash
+GODDDDOCR_PREP_MAX_DIFF_PIXELS=2 \
+GODDDDOCR_PREP_MAX_ABS_DIFF=1 \
+GODDDDOCR_PREP_MAX_RMSE=0.02 \
+  scripts/preprocess_compare.sh samples/yzm1.png
+```
 
 ## Status
 
