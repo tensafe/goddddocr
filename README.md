@@ -126,6 +126,11 @@ scripts/ci_linux.sh
 The script runs unit tests, builds all commands, installs the current platform
 ONNX Runtime with `cmd/ortfetch`, and then runs `scripts/smoke.sh`.
 
+Docker smoke is available as a manual GitHub Actions workflow named
+`Docker Smoke`. It builds the service image for `linux/amd64` or `linux/arm64`,
+starts a temporary container, waits for `/ready`, and checks the bundled OCR
+sample through HTTP.
+
 Endpoints:
 
 - `GET /health`

@@ -1,0 +1,37 @@
+name: Docker Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Docker target platform
+        required: true
+        default: linux/amd64
+        type: choice
+        options:
+          - linux/amd64
+          - linux/arm64
+
+permissions:
+  contents: read
+
+jobs:
+  docker-smoke:
+    name: Docker smoke (${{ inputs.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: ${{ inputs.platform == 'linux/arm64' }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Run Docker smoke
+        env:
+          GODDDDOCR_DOCKER_PLATFORM: ${{ inputs.platform }}
+          GODDDDOCR_DOCKER_IMAGE: goddddocr:ci-smoke
+          GODDDDOCR_DOCKER_PORT: "18088"
+        run: scripts/docker_smoke.sh

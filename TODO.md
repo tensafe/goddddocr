@@ -69,6 +69,8 @@
   - Acceptance: each target can start service and classify a sample image.
 - [x] Add CI.
   - Acceptance: Linux test/build runs automatically.
+- [x] Add optional Docker smoke CI.
+  - Acceptance: manual workflow builds the Docker image and verifies `/ready` plus sample OCR.
 
 ## P4: Service Performance And Operations
 
