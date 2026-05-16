@@ -1,4 +1,4 @@
-.PHONY: test server ort doctor smoke docker-smoke bench-workers eval-samples
+.PHONY: test server ort doctor smoke docker-smoke bench-workers eval-samples prep-sample
 
 test:
 	go test ./...
@@ -23,3 +23,6 @@ bench-workers:
 
 eval-samples:
 	go run ./cmd/ocreval -manifest fixtures/ocr_golden.json
+
+prep-sample:
+	go run ./cmd/ocrprep -image samples/yzm1.png -out /tmp/goddddocr-preprocess.png -json /tmp/goddddocr-preprocess.json -matrix-csv /tmp/goddddocr-preprocess.csv

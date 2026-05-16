@@ -1,6 +1,7 @@
 package goddddocr
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"
@@ -10,6 +11,64 @@ import (
 )
 
 const ocrTargetHeight = 64
+
+type PreprocessOptions struct {
+	PNGFix      bool
+	ColorFilter *ColorFilterOptions
+}
+
+type PreprocessResult struct {
+	Width  int       `json:"width"`
+	Height int       `json:"height"`
+	Data   []float32 `json:"data"`
+}
+
+func PreprocessOCRBytes(data []byte, options *PreprocessOptions) (*PreprocessResult, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode image: %w", err)
+	}
+	return PreprocessOCRImage(img, options)
+}
+
+func PreprocessOCRImage(img image.Image, options *PreprocessOptions) (*PreprocessResult, error) {
+	pngFix := false
+	var colorFilter *ColorFilterOptions
+	if options != nil {
+		pngFix = options.PNGFix
+		colorFilter = options.ColorFilter
+	}
+
+	data, width, err := preprocessOCRImage(img, pngFix, colorFilter)
+	if err != nil {
+		return nil, err
+	}
+	return &PreprocessResult{
+		Width:  width,
+		Height: ocrTargetHeight,
+		Data:   data,
+	}, nil
+}
+
+func (r *PreprocessResult) GrayImage() (*image.Gray, error) {
+	if r == nil || r.Width <= 0 || r.Height <= 0 {
+		return nil, fmt.Errorf("invalid preprocess result dimensions")
+	}
+	if len(r.Data) != r.Width*r.Height {
+		return nil, fmt.Errorf("preprocess data length %d does not match dimensions %dx%d", len(r.Data), r.Width, r.Height)
+	}
+	img := image.NewGray(image.Rect(0, 0, r.Width, r.Height))
+	for idx, value := range r.Data {
+		if value < 0 {
+			value = 0
+		}
+		if value > 1 {
+			value = 1
+		}
+		img.Pix[idx] = uint8(math.Round(float64(value) * 255.0))
+	}
+	return img, nil
+}
 
 func preprocessOCRImage(img image.Image, pngFix bool, colorFilter *ColorFilterOptions) ([]float32, int, error) {
 	bounds := img.Bounds()

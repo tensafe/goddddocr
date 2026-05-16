@@ -328,6 +328,23 @@ go run ./cmd/ocreval -manifest fixtures/ocr_golden.json -json
 Ignored local paths are available for private runs: `samples/local/`,
 `samples/private/`, and `reports/ocr-eval/`.
 
+## Preprocessing Debug
+
+Use `ocrprep` when comparing Go preprocessing against Python/PIL. It exports the
+64px-high grayscale model input as a PNG, optional pixel matrix CSV, and a JSON
+report with dimensions, min/max/mean, and SHA-256 of the grayscale bytes:
+
+```bash
+go run ./cmd/ocrprep \
+  -image samples/yzm1.png \
+  -out /tmp/goddddocr-preprocess.png \
+  -matrix-csv /tmp/goddddocr-preprocess.csv \
+  -json /tmp/goddddocr-preprocess.json
+```
+
+The command also accepts `-png-fix`, `-color-filter-colors`, and
+`-color-filter-custom-ranges`, matching OCR request preprocessing options.
+
 ## Status
 
 - OCR classification: implemented.
