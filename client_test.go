@@ -88,6 +88,52 @@ func TestOCRClientClassifyBytes(t *testing.T) {
 	}
 }
 
+func TestOCRClientDetectBytes(t *testing.T) {
+	image := []byte("fake-image")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/det" {
+			http.NotFound(w, r)
+			return
+		}
+		var req detectionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if !req.Detailed {
+			t.Fatal("expected detailed request")
+		}
+		got, err := base64.StdEncoding.DecodeString(req.Image)
+		if err != nil {
+			t.Fatalf("decode image: %v", err)
+		}
+		if string(got) != string(image) {
+			t.Fatalf("image mismatch: got %q, want %q", got, image)
+		}
+		writeJSON(w, r, http.StatusOK, detectionResponse{
+			Result:           [][]int{{1, 2, 30, 40}},
+			Boxes:            []DetectionBox{{X1: 1, Y1: 2, X2: 30, Y2: 40, Score: 0.9}},
+			ProcessingTimeMS: 1.5,
+			RequestID:        "det-1",
+		})
+	}))
+	defer server.Close()
+
+	client := NewOCRClient(server.URL)
+	result, err := client.DetectBytes(context.Background(), image, &RemoteDetectOptions{Detailed: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Result) != 1 || result.Result[0][2] != 30 {
+		t.Fatalf("unexpected detection result: %#v", result.Result)
+	}
+	if len(result.Boxes) != 1 || result.Boxes[0].Score != 0.9 {
+		t.Fatalf("unexpected detection boxes: %#v", result.Boxes)
+	}
+	if result.RequestID != "det-1" {
+		t.Fatalf("request id mismatch: got %q", result.RequestID)
+	}
+}
+
 func TestOCRClientRemoteError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_image", "image must be valid base64")

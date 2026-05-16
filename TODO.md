@@ -109,7 +109,7 @@
 
 - [x] Port object detection core.
   - Acceptance: `common_det.onnx` inference and NMS return bounding boxes compatible with Python from the Go module API.
-- [ ] Add HTTP endpoint for object detection.
+- [x] Add HTTP endpoint for object detection.
   - Acceptance: `/det` accepts base64 JSON and returns Python-compatible bounding boxes.
 - [ ] Port slide comparison.
   - Acceptance: diff-based gap location works without Python.
@@ -122,8 +122,8 @@
 
 ## Recommended Next Batch
 
-1. Add `/det` and `/det/file` endpoints around the Go detection core.
-2. Add detection golden fixtures against Python ddddocr.
-3. Start slide comparison with pure-Go image operations.
+1. Add detection golden fixtures against Python ddddocr.
+2. Start slide comparison with pure-Go image operations.
+3. Document tsplay flow usage for `/det`.
 4. Run thresholded preprocessing checks on private OCR samples.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.

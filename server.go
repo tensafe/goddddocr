@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -20,6 +21,7 @@ const (
 
 type Server struct {
 	ocr           OCREngine
+	detector      DetectionEngine
 	maxImageBytes int64
 	maxBodyBytes  int64
 	logger        *log.Logger
@@ -56,6 +58,19 @@ func WithLogger(logger *log.Logger) ServerOption {
 	}
 }
 
+func WithDetector(detector DetectionEngine) ServerOption {
+	return func(s *Server) {
+		if detector == nil {
+			return
+		}
+		value := reflect.ValueOf(detector)
+		if value.Kind() == reflect.Ptr && value.IsNil() {
+			return
+		}
+		s.detector = detector
+	}
+}
+
 func NewServer(ocr OCREngine, options ...ServerOption) *Server {
 	s := &Server{
 		ocr:           ocr,
@@ -78,6 +93,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("POST /ocr", s.handleOCR)
 	mux.HandleFunc("POST /ocr/file", s.handleOCRFile)
+	mux.HandleFunc("POST /det", s.handleDetection)
+	mux.HandleFunc("POST /det/file", s.handleDetectionFile)
 	return s.accessLog(s.requestID(mux))
 }
 
@@ -89,18 +106,23 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if s.ocr != nil {
 		payload["model"] = s.ocr.Model()
 	}
+	payload["detection"] = s.detector != nil
 	writeJSON(w, r, http.StatusOK, payload)
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
-	if s.ocr == nil {
-		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "OCR engine is not initialized")
+	if s.ocr == nil && s.detector == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "no recognition engines are initialized")
 		return
 	}
-	writeJSON(w, r, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"status": "ready",
-		"model":  s.ocr.Model(),
-	})
+	}
+	if s.ocr != nil {
+		payload["model"] = s.ocr.Model()
+	}
+	payload["detection"] = s.detector != nil
+	writeJSON(w, r, http.StatusOK, payload)
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +152,18 @@ type ocrResponse struct {
 	RequestID        string             `json:"request_id,omitempty"`
 	Confidence       *float64           `json:"confidence,omitempty"`
 	Probability      *ProbabilityMatrix `json:"probability,omitempty"`
+}
+
+type detectionRequest struct {
+	Image    string `json:"image"`
+	Detailed bool   `json:"detailed,omitempty"`
+}
+
+type detectionResponse struct {
+	Result           [][]int        `json:"result"`
+	Boxes            []DetectionBox `json:"boxes,omitempty"`
+	ProcessingTimeMS float64        `json:"processing_time_ms"`
+	RequestID        string         `json:"request_id,omitempty"`
 }
 
 func (s *Server) handleOCR(w http.ResponseWriter, r *http.Request) {
@@ -296,6 +330,105 @@ func (s *Server) handleOCRFile(w http.ResponseWriter, r *http.Request) {
 	}
 	if probability {
 		resp.Probability = result.Probability
+	}
+	writeJSON(w, r, http.StatusOK, resp)
+}
+
+func (s *Server) handleDetection(w http.ResponseWriter, r *http.Request) {
+	if s.detector == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "detection engine is not initialized")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	defer r.Body.Close()
+
+	var req detectionRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", fmt.Sprintf("request exceeds %d bytes", s.maxBodyBytes))
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.Image) == "" {
+		writeError(w, r, http.StatusBadRequest, "missing_image", "image is required")
+		return
+	}
+	data, err := decodeBase64Image(req.Image)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_image", err.Error())
+		return
+	}
+	if int64(len(data)) > s.maxImageBytes {
+		writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", fmt.Sprintf("image exceeds %d bytes", s.maxImageBytes))
+		return
+	}
+
+	s.writeDetectionResult(w, r, data, req.Detailed)
+}
+
+func (s *Server) handleDetectionFile(w http.ResponseWriter, r *http.Request) {
+	if s.detector == nil {
+		writeError(w, r, http.StatusServiceUnavailable, "not_ready", "detection engine is not initialized")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	defer r.Body.Close()
+
+	if err := r.ParseMultipartForm(s.maxBodyBytes); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeError(w, r, http.StatusRequestEntityTooLarge, "request_too_large", fmt.Sprintf("request exceeds %d bytes", s.maxBodyBytes))
+			return
+		}
+		writeError(w, r, http.StatusBadRequest, "invalid_multipart", "invalid multipart form")
+		return
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "missing_file", "file is required")
+		return
+	}
+	defer file.Close()
+
+	data, err := readLimited(file, s.maxImageBytes)
+	if err != nil {
+		writeError(w, r, http.StatusRequestEntityTooLarge, "image_too_large", err.Error())
+		return
+	}
+	detailed, err := parseOptionalBool(r.FormValue("detailed"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_detailed", "detailed must be a boolean")
+		return
+	}
+
+	s.writeDetectionResult(w, r, data, detailed)
+}
+
+func (s *Server) writeDetectionResult(w http.ResponseWriter, r *http.Request, data []byte, detailed bool) {
+	start := time.Now()
+	boxes, err := s.detector.DetectBytesDetailed(data)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, "detection_failed", err.Error())
+		return
+	}
+
+	result := make([][]int, len(boxes))
+	for idx, box := range boxes {
+		result[idx] = box.Rect()
+	}
+	resp := detectionResponse{
+		Result:           result,
+		ProcessingTimeMS: float64(time.Since(start).Microseconds()) / 1000.0,
+		RequestID:        requestIDFrom(r),
+	}
+	if detailed {
+		resp.Boxes = boxes
 	}
 	writeJSON(w, r, http.StatusOK, resp)
 }

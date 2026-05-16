@@ -11,6 +11,18 @@ import (
 	"testing"
 )
 
+type fakeDetector struct {
+	boxes []DetectionBox
+	err   error
+}
+
+func (f fakeDetector) DetectBytesDetailed(data []byte) ([]DetectionBox, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.boxes, nil
+}
+
 func TestDecodeBase64ImageDataURL(t *testing.T) {
 	want := []byte("image")
 	got, err := decodeBase64Image("data:image/png;base64," + base64.StdEncoding.EncodeToString(want))
@@ -160,6 +172,52 @@ func TestServerHealthWithoutEngine(t *testing.T) {
 	}
 	if _, ok := body["model"]; ok {
 		t.Fatalf("model should be omitted without engine: %#v", body["model"])
+	}
+	if body["detection"] != false {
+		t.Fatalf("detection = %#v, want false", body["detection"])
+	}
+}
+
+func TestServerDetectionEndpoint(t *testing.T) {
+	s := NewServer(nil, WithLogger(nil), WithDetector(fakeDetector{
+		boxes: []DetectionBox{{X1: 1, Y1: 2, X2: 30, Y2: 40, Score: 0.9}},
+	}))
+	data := base64.StdEncoding.EncodeToString([]byte("fake-image"))
+	body := strings.NewReader(`{"image":"` + data + `","detailed":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/det", body)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("det status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	var resp detectionResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Result) != 1 || len(resp.Result[0]) != 4 {
+		t.Fatalf("unexpected result: %#v", resp.Result)
+	}
+	if resp.Result[0][0] != 1 || resp.Result[0][3] != 40 {
+		t.Fatalf("unexpected result box: %#v", resp.Result[0])
+	}
+	if len(resp.Boxes) != 1 || resp.Boxes[0].Score != 0.9 {
+		t.Fatalf("detailed boxes missing: %#v", resp.Boxes)
+	}
+}
+
+func TestServerDetectionEndpointNotReady(t *testing.T) {
+	s := NewServer(nil, WithLogger(nil))
+	data := base64.StdEncoding.EncodeToString([]byte("fake-image"))
+	req := httptest.NewRequest(http.MethodPost, "/det", strings.NewReader(`{"image":"`+data+`"}`))
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("det status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
 	}
 }
 

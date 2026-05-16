@@ -49,6 +49,10 @@ func (b DetectionBox) Rect() []int {
 	return []int{b.X1, b.Y1, b.X2, b.Y2}
 }
 
+type DetectionEngine interface {
+	DetectBytesDetailed(data []byte) ([]DetectionBox, error)
+}
+
 type Detector struct {
 	inputSize      int
 	scoreThreshold float64

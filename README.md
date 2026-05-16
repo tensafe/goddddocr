@@ -68,6 +68,13 @@ CLI flags can be supplied directly or through environment variables:
 | `-input-name` | `GODDDDOCR_INPUT_NAME` | `input1` |
 | `-output-name` | `GODDDDOCR_OUTPUT_NAME` | `387` |
 | `-png-fix` | `GODDDDOCR_PNG_FIX` | `false` |
+| `-det` | `GODDDDOCR_DET` | `false` |
+| `-det-model-path` | `GODDDDOCR_DET_MODEL_PATH` | empty |
+| `-det-input-name` | `GODDDDOCR_DET_INPUT_NAME` | `images` |
+| `-det-output-name` | `GODDDDOCR_DET_OUTPUT_NAME` | `output` |
+| `-det-input-size` | `GODDDDOCR_DET_INPUT_SIZE` | `416` |
+| `-det-score-threshold` | `GODDDDOCR_DET_SCORE_THRESHOLD` | `0.1` |
+| `-det-nms-threshold` | `GODDDDOCR_DET_NMS_THRESHOLD` | `0.45` |
 | `-workers` | `GODDDDOCR_WORKERS` | `1` |
 | `-log-format` | `GODDDDOCR_LOG_FORMAT` | `text` |
 | `-max-image-bytes` | `GODDDDOCR_MAX_IMAGE_BYTES` | `8388608` |
@@ -138,6 +145,8 @@ Endpoints:
 - `GET /metrics`
 - `POST /ocr`
 - `POST /ocr/file`
+- `POST /det`
+- `POST /det/file`
 
 `POST /ocr` accepts:
 
@@ -178,8 +187,30 @@ OCR preprocessing. Presets match ddddocr's HSV ranges: `red`, `blue`, `green`,
 
 ## Detection API
 
-The Go module includes the embedded ddddocr detection model and exposes a
-library-level detector:
+The Go module includes the embedded ddddocr detection model. Enable HTTP
+detection endpoints with `-det`:
+
+```bash
+go run ./cmd/goddddocr-server -det
+curl -s -X POST http://127.0.0.1:8088/det \
+  -H 'content-type: application/json' \
+  -d "{\"image\":\"$(base64 -i samples/yzm2.jpeg)\"}"
+```
+
+`POST /det` accepts `image` and optional `detailed`. The `result` field is
+Python-compatible `[][]int`, where each box is `[x1, y1, x2, y2]`.
+When `detailed` is true, `boxes` also includes score and class id.
+
+The HTTP client exposes the same endpoint:
+
+```go
+result, err := client.DetectBytes(ctx, imageBytes, &goddddocr.RemoteDetectOptions{
+    Detailed: true,
+})
+fmt.Println(result.Result)
+```
+
+The library-level detector is available directly:
 
 ```go
 det, err := goddddocr.NewDetector(goddddocr.DetectionConfig{})
@@ -191,9 +222,7 @@ defer det.Close()
 boxes, err := det.DetectBytes(imageBytes)
 ```
 
-`DetectBytes` returns Python-compatible boxes as `[][]int`, where each box is
-`[x1, y1, x2, y2]`. `DetectBytesDetailed` also returns score and class id.
-The HTTP detection endpoint is still planned.
+`DetectBytesDetailed` returns score and class id.
 
 `GET /metrics` returns service counters and latency aggregates as JSON:
 
@@ -414,6 +443,6 @@ GODDDDOCR_PREP_MAX_RMSE=0.02 \
 ## Status
 
 - OCR classification: implemented.
-- HTTP service: `/health`, `/ocr`, `/ocr/file`.
-- Detection: module API implemented; HTTP endpoint planned.
+- HTTP service: `/health`, `/ocr`, `/ocr/file`, `/det`, `/det/file`.
+- Detection: module and HTTP API implemented.
 - Slide matching: planned.

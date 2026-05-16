@@ -26,6 +26,13 @@ func main() {
 	outputName := flag.String("output-name", envString("GODDDDOCR_OUTPUT_NAME", ""), "ONNX output name override")
 	ortLib := flag.String("onnxruntime-lib", envString("ONNXRUNTIME_SHARED_LIBRARY_PATH", ""), "path to ONNX Runtime shared library")
 	pngFix := flag.Bool("png-fix", envBool("GODDDDOCR_PNG_FIX", false), "composite transparent PNGs over a white background")
+	detEnabled := flag.Bool("det", envBool("GODDDDOCR_DET", false), "enable ddddocr object detection endpoints")
+	detModelPath := flag.String("det-model-path", envString("GODDDDOCR_DET_MODEL_PATH", ""), "path to a custom ONNX detection model")
+	detInputName := flag.String("det-input-name", envString("GODDDDOCR_DET_INPUT_NAME", ""), "detection ONNX input name override")
+	detOutputName := flag.String("det-output-name", envString("GODDDDOCR_DET_OUTPUT_NAME", ""), "detection ONNX output name override")
+	detInputSize := flag.Int("det-input-size", envInt("GODDDDOCR_DET_INPUT_SIZE", 416), "detection model input size")
+	detScoreThreshold := flag.Float64("det-score-threshold", envFloat("GODDDDOCR_DET_SCORE_THRESHOLD", 0.1), "detection score threshold")
+	detNMSThreshold := flag.Float64("det-nms-threshold", envFloat("GODDDDOCR_DET_NMS_THRESHOLD", 0.45), "detection NMS threshold")
 	workers := flag.Int("workers", envInt("GODDDDOCR_WORKERS", 1), "number of OCR sessions to keep in the worker pool")
 	logFormatValue := flag.String("log-format", envString("GODDDDOCR_LOG_FORMAT", string(goddddocr.LogFormatText)), "log format: text or json")
 	maxImageBytes := flag.Int64("max-image-bytes", envInt64("GODDDDOCR_MAX_IMAGE_BYTES", goddddocr.DefaultMaxImageBytes), "maximum decoded image size in bytes")
@@ -59,10 +66,29 @@ func main() {
 	}
 	defer ocr.Close()
 
+	var detector *goddddocr.Detector
+	if *detEnabled {
+		detector, err = goddddocr.NewDetector(goddddocr.DetectionConfig{
+			ModelPath:         *detModelPath,
+			InputName:         *detInputName,
+			OutputName:        *detOutputName,
+			SharedLibraryPath: *ortLib,
+			InputSize:         *detInputSize,
+			ScoreThreshold:    *detScoreThreshold,
+			NMSThreshold:      *detNMSThreshold,
+		})
+		if err != nil {
+			logServiceEvent(logger, logFormat, "detector_init_failed", map[string]any{"error": err.Error()})
+			os.Exit(1)
+		}
+		defer detector.Close()
+	}
+
 	server := &http.Server{
 		Addr: *addr,
 		Handler: goddddocr.NewServer(
 			ocr,
+			goddddocr.WithDetector(detector),
 			goddddocr.WithMaxImageBytes(*maxImageBytes),
 			goddddocr.WithLogger(logger),
 			goddddocr.WithLogFormat(logFormat),
@@ -86,6 +112,7 @@ func main() {
 		"addr":       *addr,
 		"model":      ocr.Model(),
 		"workers":    ocr.Size(),
+		"detection":  detector != nil,
 		"log_format": logFormat,
 	}
 	if strings.TrimSpace(*modelPath) != "" {
@@ -93,6 +120,9 @@ func main() {
 	}
 	if strings.TrimSpace(*charsetPath) != "" {
 		startFields["charset_path"] = *charsetPath
+	}
+	if strings.TrimSpace(*detModelPath) != "" {
+		startFields["det_model_path"] = *detModelPath
 	}
 	logServiceEvent(logger, logFormat, "server_started", startFields)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -177,6 +207,18 @@ func envInt(name string, fallback int) int {
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func envFloat(name string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed < 0 {
 		return fallback
 	}
 	return parsed

@@ -77,6 +77,17 @@ type RemoteClassifyResult struct {
 	Probability      *ProbabilityMatrix `json:"probability,omitempty"`
 }
 
+type RemoteDetectOptions struct {
+	Detailed bool
+}
+
+type RemoteDetectResult struct {
+	Result           [][]int        `json:"result"`
+	Boxes            []DetectionBox `json:"boxes,omitempty"`
+	ProcessingTimeMS float64        `json:"processing_time_ms"`
+	RequestID        string         `json:"request_id,omitempty"`
+}
+
 type RemoteError struct {
 	StatusCode int
 	Code       string
@@ -92,6 +103,60 @@ func (e *RemoteError) Error() string {
 		return fmt.Sprintf("goddddocr request failed: status=%d message=%s", e.StatusCode, e.Message)
 	}
 	return fmt.Sprintf("goddddocr request failed: status=%d code=%s message=%s", e.StatusCode, e.Code, e.Message)
+}
+
+func (c *OCRClient) DetectBytes(ctx context.Context, image []byte, options *RemoteDetectOptions) (*RemoteDetectResult, error) {
+	if c == nil {
+		return nil, fmt.Errorf("nil OCR client")
+	}
+	if c.baseURL == "" {
+		return nil, fmt.Errorf("base URL is empty")
+	}
+	if len(image) == 0 {
+		return nil, fmt.Errorf("image is empty")
+	}
+	if c.maxImageBytes > 0 && int64(len(image)) > c.maxImageBytes {
+		return nil, fmt.Errorf("image exceeds %d bytes", c.maxImageBytes)
+	}
+
+	reqBody := detectionRequest{
+		Image: base64.StdEncoding.EncodeToString(image),
+	}
+	if options != nil {
+		reqBody.Detailed = options.Detailed
+	}
+
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/det", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, c.maxBodyBytes()))
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, parseRemoteError(resp, body)
+	}
+
+	var result RemoteDetectResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("decode detection response: %w", err)
+	}
+	return &result, nil
 }
 
 func (c *OCRClient) ClassifyBytes(ctx context.Context, image []byte, options *RemoteClassifyOptions) (*RemoteClassifyResult, error) {
