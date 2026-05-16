@@ -127,11 +127,13 @@
   - Acceptance: `python_ddddocr` fields are generated from Python ddddocr for current committed fixtures.
 - [ ] Add real slide captcha Python golden fixtures.
   - Acceptance: `python_ddddocr` fields cover representative real slide comparison and match samples.
+- [x] Add per-request detection threshold overrides.
+  - Acceptance: `/det` and Go client can override `score_threshold` and `nms_threshold` without restarting the service.
 
 ## Recommended Next Batch
 
 1. Tune edge-based slide match against real captcha samples.
 2. Document tsplay flow usage for `/det`, `/slide_comparison`, and `/slide_match`.
 3. Add ignored private fixture workflow for real slide captcha samples.
-4. Decide whether to expose detection score threshold tuning in tsplay config.
+4. Wire detection score threshold tuning into tsplay config.
 5. Verify native builds on Windows, Linux, and macOS with `scripts/smoke.*`.

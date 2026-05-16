@@ -24,6 +24,20 @@ func (f fakeDetector) DetectBytesDetailed(data []byte) ([]DetectionBox, error) {
 	return f.boxes, nil
 }
 
+type fakeConfigurableDetector struct {
+	boxes   []DetectionBox
+	options *DetectionOptions
+}
+
+func (f *fakeConfigurableDetector) DetectBytesDetailed(data []byte) ([]DetectionBox, error) {
+	return f.boxes, nil
+}
+
+func (f *fakeConfigurableDetector) DetectBytesDetailedWithOptions(data []byte, options *DetectionOptions) ([]DetectionBox, error) {
+	f.options = options
+	return f.boxes, nil
+}
+
 func TestDecodeBase64ImageDataURL(t *testing.T) {
 	want := []byte("image")
 	got, err := decodeBase64Image("data:image/png;base64," + base64.StdEncoding.EncodeToString(want))
@@ -206,6 +220,68 @@ func TestServerDetectionEndpoint(t *testing.T) {
 	}
 	if len(resp.Boxes) != 1 || resp.Boxes[0].Score != 0.9 {
 		t.Fatalf("detailed boxes missing: %#v", resp.Boxes)
+	}
+}
+
+func TestServerDetectionEndpointOptions(t *testing.T) {
+	detector := &fakeConfigurableDetector{
+		boxes: []DetectionBox{{X1: 1, Y1: 2, X2: 30, Y2: 40, Score: 0.9}},
+	}
+	scoreThreshold := 0.05
+	nmsThreshold := 0.35
+	payload, err := json.Marshal(detectionRequest{
+		Image:          base64.StdEncoding.EncodeToString([]byte("fake-image")),
+		Detailed:       true,
+		ScoreThreshold: &scoreThreshold,
+		NMSThreshold:   &nmsThreshold,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil), WithDetector(detector))
+	req := httptest.NewRequest(http.MethodPost, "/det", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("det status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	if detector.options == nil || detector.options.ScoreThreshold == nil || detector.options.NMSThreshold == nil {
+		t.Fatalf("options not passed: %#v", detector.options)
+	}
+	if *detector.options.ScoreThreshold != scoreThreshold || *detector.options.NMSThreshold != nmsThreshold {
+		t.Fatalf("options = %#v", detector.options)
+	}
+}
+
+func TestServerDetectionEndpointRejectsInvalidOptions(t *testing.T) {
+	scoreThreshold := 1.5
+	payload, err := json.Marshal(detectionRequest{
+		Image:          base64.StdEncoding.EncodeToString([]byte("fake-image")),
+		ScoreThreshold: &scoreThreshold,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer(nil, WithLogger(nil), WithDetector(fakeDetector{}))
+	req := httptest.NewRequest(http.MethodPost, "/det", bytes.NewReader(payload))
+	recorder := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("det status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	var resp errorResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Error.Code != "invalid_detection_options" {
+		t.Fatalf("error code = %q", resp.Error.Code)
 	}
 }
 

@@ -78,7 +78,9 @@ type RemoteClassifyResult struct {
 }
 
 type RemoteDetectOptions struct {
-	Detailed bool
+	Detailed       bool
+	ScoreThreshold *float64
+	NMSThreshold   *float64
 }
 
 type RemoteDetectResult struct {
@@ -257,6 +259,8 @@ func (c *OCRClient) DetectBytes(ctx context.Context, image []byte, options *Remo
 	}
 	if options != nil {
 		reqBody.Detailed = options.Detailed
+		reqBody.ScoreThreshold = options.ScoreThreshold
+		reqBody.NMSThreshold = options.NMSThreshold
 	}
 
 	payload, err := json.Marshal(reqBody)

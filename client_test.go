@@ -102,6 +102,12 @@ func TestOCRClientDetectBytes(t *testing.T) {
 		if !req.Detailed {
 			t.Fatal("expected detailed request")
 		}
+		if req.ScoreThreshold == nil || *req.ScoreThreshold != 0.05 {
+			t.Fatalf("unexpected score threshold: %#v", req.ScoreThreshold)
+		}
+		if req.NMSThreshold == nil || *req.NMSThreshold != 0.35 {
+			t.Fatalf("unexpected nms threshold: %#v", req.NMSThreshold)
+		}
 		got, err := base64.StdEncoding.DecodeString(req.Image)
 		if err != nil {
 			t.Fatalf("decode image: %v", err)
@@ -119,7 +125,13 @@ func TestOCRClientDetectBytes(t *testing.T) {
 	defer server.Close()
 
 	client := NewOCRClient(server.URL)
-	result, err := client.DetectBytes(context.Background(), image, &RemoteDetectOptions{Detailed: true})
+	scoreThreshold := 0.05
+	nmsThreshold := 0.35
+	result, err := client.DetectBytes(context.Background(), image, &RemoteDetectOptions{
+		Detailed:       true,
+		ScoreThreshold: &scoreThreshold,
+		NMSThreshold:   &nmsThreshold,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

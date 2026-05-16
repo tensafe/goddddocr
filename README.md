@@ -205,15 +205,19 @@ curl -s -X POST http://127.0.0.1:8088/det \
   -d "{\"image\":\"$(base64 -i samples/yzm2.jpeg)\"}"
 ```
 
-`POST /det` accepts `image` and optional `detailed`. The `result` field is
+`POST /det` accepts `image`, optional `detailed`, and optional per-request
+`score_threshold` / `nms_threshold` overrides. The `result` field is
 Python-compatible `[][]int`, where each box is `[x1, y1, x2, y2]`.
-When `detailed` is true, `boxes` also includes score and class id.
+When `detailed` is true, `boxes` also includes score and class id. Thresholds
+must be between `0` and `1`; omitted values use the service defaults.
 
 The HTTP client exposes the same endpoint:
 
 ```go
+scoreThreshold := 0.05
 result, err := client.DetectBytes(ctx, imageBytes, &goddddocr.RemoteDetectOptions{
     Detailed: true,
+    ScoreThreshold: &scoreThreshold,
 })
 fmt.Println(result.Result)
 ```

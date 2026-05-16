@@ -85,6 +85,50 @@ func TestProcessDetectionOutput(t *testing.T) {
 	}
 }
 
+func TestProcessDetectionOutputThreshold(t *testing.T) {
+	data := []float32{
+		2.5, 2.5, float32(math.Log(2)), 0, 1, 0.08,
+	}
+
+	boxes, err := processDetectionOutput(data, ort.Shape{1, 1, 6}, 1, 100, 80, 416, 0.1, 0.45)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(boxes) != 0 {
+		t.Fatalf("box count = %d, want 0", len(boxes))
+	}
+
+	boxes, err = processDetectionOutput(data, ort.Shape{1, 1, 6}, 1, 100, 80, 416, 0.05, 0.45)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(boxes) != 1 {
+		t.Fatalf("box count = %d, want 1", len(boxes))
+	}
+}
+
+func TestDetectorThresholdOptions(t *testing.T) {
+	detector := &Detector{scoreThreshold: 0.1, nmsThreshold: 0.45}
+	scoreThreshold := 0.05
+	nmsThreshold := 0.35
+
+	score, nms, err := detector.thresholds(&DetectionOptions{
+		ScoreThreshold: &scoreThreshold,
+		NMSThreshold:   &nmsThreshold,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if score != scoreThreshold || nms != nmsThreshold {
+		t.Fatalf("thresholds = %.2f %.2f", score, nms)
+	}
+
+	invalid := 1.5
+	if _, _, err := detector.thresholds(&DetectionOptions{ScoreThreshold: &invalid}); err == nil {
+		t.Fatal("expected invalid threshold error")
+	}
+}
+
 func TestNMSDetectionCandidates(t *testing.T) {
 	candidates := []detectionCandidate{
 		{x1: 0, y1: 0, x2: 10, y2: 10, score: 0.9},

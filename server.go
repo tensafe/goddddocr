@@ -168,8 +168,10 @@ type ocrResponse struct {
 }
 
 type detectionRequest struct {
-	Image    string `json:"image"`
-	Detailed bool   `json:"detailed,omitempty"`
+	Image          string   `json:"image"`
+	Detailed       bool     `json:"detailed,omitempty"`
+	ScoreThreshold *float64 `json:"score_threshold,omitempty"`
+	NMSThreshold   *float64 `json:"nms_threshold,omitempty"`
 }
 
 type detectionResponse struct {
@@ -404,7 +406,13 @@ func (s *Server) handleDetection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeDetectionResult(w, r, data, req.Detailed)
+	options := detectionOptionsOrNil(req.ScoreThreshold, req.NMSThreshold)
+	if err := validateDetectionOptions(options); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_detection_options", err.Error())
+		return
+	}
+
+	s.writeDetectionResult(w, r, data, req.Detailed, options)
 }
 
 func (s *Server) handleDetectionFile(w http.ResponseWriter, r *http.Request) {
@@ -442,13 +450,28 @@ func (s *Server) handleDetectionFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid_detailed", "detailed must be a boolean")
 		return
 	}
+	scoreThreshold, err := parseOptionalFloat(r.FormValue("score_threshold"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_score_threshold", "score_threshold must be a number")
+		return
+	}
+	nmsThreshold, err := parseOptionalFloat(r.FormValue("nms_threshold"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_nms_threshold", "nms_threshold must be a number")
+		return
+	}
+	options := detectionOptionsOrNil(scoreThreshold, nmsThreshold)
+	if err := validateDetectionOptions(options); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid_detection_options", err.Error())
+		return
+	}
 
-	s.writeDetectionResult(w, r, data, detailed)
+	s.writeDetectionResult(w, r, data, detailed, options)
 }
 
-func (s *Server) writeDetectionResult(w http.ResponseWriter, r *http.Request, data []byte, detailed bool) {
+func (s *Server) writeDetectionResult(w http.ResponseWriter, r *http.Request, data []byte, detailed bool, options *DetectionOptions) {
 	start := time.Now()
-	boxes, err := s.detector.DetectBytesDetailed(data)
+	boxes, err := detectBytesDetailed(s.detector, data, options)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "detection_failed", err.Error())
 		return
@@ -467,6 +490,44 @@ func (s *Server) writeDetectionResult(w http.ResponseWriter, r *http.Request, da
 		resp.Boxes = boxes
 	}
 	writeJSON(w, r, http.StatusOK, resp)
+}
+
+type detectionEngineWithOptions interface {
+	DetectBytesDetailedWithOptions(data []byte, options *DetectionOptions) ([]DetectionBox, error)
+}
+
+func detectBytesDetailed(detector DetectionEngine, data []byte, options *DetectionOptions) ([]DetectionBox, error) {
+	if options == nil {
+		return detector.DetectBytesDetailed(data)
+	}
+	withOptions, ok := detector.(detectionEngineWithOptions)
+	if !ok {
+		return nil, fmt.Errorf("detection options are not supported by this engine")
+	}
+	return withOptions.DetectBytesDetailedWithOptions(data, options)
+}
+
+func detectionOptionsOrNil(scoreThreshold *float64, nmsThreshold *float64) *DetectionOptions {
+	if scoreThreshold == nil && nmsThreshold == nil {
+		return nil
+	}
+	return &DetectionOptions{
+		ScoreThreshold: scoreThreshold,
+		NMSThreshold:   nmsThreshold,
+	}
+}
+
+func validateDetectionOptions(options *DetectionOptions) error {
+	if options == nil {
+		return nil
+	}
+	if options.ScoreThreshold != nil && (*options.ScoreThreshold < 0 || *options.ScoreThreshold > 1) {
+		return fmt.Errorf("score_threshold must be between 0 and 1")
+	}
+	if options.NMSThreshold != nil && (*options.NMSThreshold < 0 || *options.NMSThreshold > 1) {
+		return fmt.Errorf("nms_threshold must be between 0 and 1")
+	}
+	return nil
 }
 
 func (s *Server) handleSlideComparison(w http.ResponseWriter, r *http.Request) {
@@ -722,6 +783,18 @@ func parseOptionalBool(value string) (bool, error) {
 		return false, nil
 	}
 	return parseBool(value)
+}
+
+func parseOptionalFloat(value string) (*float64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }
 
 func parseCharsetRangeFormValue(value string) (*CharsetRange, error) {

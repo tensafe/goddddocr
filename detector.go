@@ -35,6 +35,11 @@ type DetectionConfig struct {
 	NMSThreshold      float64
 }
 
+type DetectionOptions struct {
+	ScoreThreshold *float64 `json:"score_threshold,omitempty"`
+	NMSThreshold   *float64 `json:"nms_threshold,omitempty"`
+}
+
 type DetectionBox struct {
 	X1      int     `json:"x1"`
 	Y1      int     `json:"y1"`
@@ -135,16 +140,28 @@ func (d *Detector) DetectBytes(data []byte) ([][]int, error) {
 }
 
 func (d *Detector) DetectBytesDetailed(data []byte) ([]DetectionBox, error) {
+	return d.DetectBytesDetailedWithOptions(data, nil)
+}
+
+func (d *Detector) DetectBytesDetailedWithOptions(data []byte, options *DetectionOptions) ([]DetectionBox, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)
 	}
-	return d.DetectImageDetailed(img)
+	return d.DetectImageDetailedWithOptions(img, options)
 }
 
 func (d *Detector) DetectImageDetailed(img image.Image) ([]DetectionBox, error) {
+	return d.DetectImageDetailedWithOptions(img, nil)
+}
+
+func (d *Detector) DetectImageDetailedWithOptions(img image.Image, options *DetectionOptions) ([]DetectionBox, error) {
 	if d == nil || d.session == nil {
 		return nil, fmt.Errorf("detection engine is closed")
+	}
+	scoreThreshold, nmsThreshold, err := d.thresholds(options)
+	if err != nil {
+		return nil, err
 	}
 
 	inputData, ratio, width, height, err := preprocessDetectionImage(img, d.inputSize)
@@ -174,7 +191,27 @@ func (d *Detector) DetectImageDetailed(img image.Image) ([]DetectionBox, error) 
 	if !ok {
 		return nil, fmt.Errorf("unexpected detection output tensor type %T", outputs[0])
 	}
-	return processDetectionOutput(outputTensor.GetData(), outputTensor.GetShape(), ratio, width, height, d.inputSize, d.scoreThreshold, d.nmsThreshold)
+	return processDetectionOutput(outputTensor.GetData(), outputTensor.GetShape(), ratio, width, height, d.inputSize, scoreThreshold, nmsThreshold)
+}
+
+func (d *Detector) thresholds(options *DetectionOptions) (float64, float64, error) {
+	scoreThreshold := d.scoreThreshold
+	nmsThreshold := d.nmsThreshold
+	if options != nil {
+		if options.ScoreThreshold != nil {
+			scoreThreshold = *options.ScoreThreshold
+		}
+		if options.NMSThreshold != nil {
+			nmsThreshold = *options.NMSThreshold
+		}
+	}
+	if scoreThreshold < 0 || scoreThreshold > 1 {
+		return 0, 0, fmt.Errorf("score_threshold must be between 0 and 1")
+	}
+	if nmsThreshold < 0 || nmsThreshold > 1 {
+		return 0, 0, fmt.Errorf("nms_threshold must be between 0 and 1")
+	}
+	return scoreThreshold, nmsThreshold, nil
 }
 
 func loadDetectionModelData(customPath string) ([]byte, string, error) {
