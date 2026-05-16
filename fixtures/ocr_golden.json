@@ -8,5 +8,14 @@
     "charset_range": "0123456789abcdefghijklmnopqrstuvwxyz",
     "min_confidence": 0.9,
     "source": "ddddocr upstream samples/yzm1.png"
+  },
+  {
+    "name": "upstream_yzm1_beta",
+    "image": "samples/yzm1.png",
+    "model": "beta",
+    "expected": "3n3d",
+    "charset_range": "0123456789abcdefghijklmnopqrstuvwxyz",
+    "min_confidence": 0.8,
+    "source": "ddddocr upstream samples/yzm1.png; Go ModelBeta baseline pending Python fixture generation"
   }
 ]

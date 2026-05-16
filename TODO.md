@@ -23,7 +23,7 @@
   - Acceptance: Go OCR output is compared against Python fixtures in CI/local tests.
 - [ ] Investigate preprocessing mismatches.
   - Acceptance: differences from PIL resize/grayscale/alpha handling are documented or fixed.
-- [ ] Add beta model golden tests.
+- [x] Add beta model golden tests.
   - Acceptance: `ModelBeta` has at least one fixture and regression test.
 - [ ] Add real tsplay captcha samples.
   - Acceptance: project has a private or ignored sample set for local accuracy checks.
@@ -95,7 +95,7 @@
 ## Recommended Next Batch
 
 1. Expand Python-vs-Go golden fixtures with more real captcha samples.
-2. Add `ModelBeta` golden fixtures.
+2. Add Python-generated expected output for `ModelBeta` fixtures.
 3. Verify Linux Docker build end to end.
 4. Record baseline load-test results for `workers=1/2/4`.
-5. Expand Python-vs-Go golden fixtures with more real captcha samples.
+5. Investigate preprocessing mismatches.

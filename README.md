@@ -189,7 +189,8 @@ Each fixture can set `model`, `charset_range`, `png_fix`, and
 `min_confidence`. Add new representative captcha images under `samples/` or an
 ignored local sample directory, record the Python ddddocr output in
 `python_ddddocr`, and keep `expected` equal to that value unless the fixture is
-documenting an intentional compatibility difference.
+documenting an intentional compatibility difference. If Python tooling is not
+available yet, `expected` may still be used as a Go model regression baseline.
 
 ## Status
 
