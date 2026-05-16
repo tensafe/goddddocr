@@ -115,6 +115,17 @@ GODDDDOCR_SMOKE_EXPECT=abcd \
 scripts/smoke.sh
 ```
 
+## CI
+
+Linux CI uses the same smoke path intended for release packages:
+
+```bash
+scripts/ci_linux.sh
+```
+
+The script runs unit tests, builds all commands, installs the current platform
+ONNX Runtime with `cmd/ortfetch`, and then runs `scripts/smoke.sh`.
+
 Endpoints:
 
 - `GET /health`

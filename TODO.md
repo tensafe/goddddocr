@@ -65,7 +65,7 @@
   - Acceptance: choose Git LFS, release assets, or embedded models for distribution.
 - [ ] Verify native builds on Windows, Linux, and macOS.
   - Acceptance: each target can start service and classify a sample image.
-- [ ] Add CI.
+- [x] Add CI.
   - Acceptance: Linux test/build runs automatically.
 
 ## P4: Service Performance And Operations
