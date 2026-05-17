@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	envSharedLibraryPath = "ONNXRUNTIME_SHARED_LIBRARY_PATH"
-	envRuntimeHome       = "ONNXRUNTIME_HOME"
-	ortVersion           = "1.25.0"
+	envSharedLibraryPath  = "ONNXRUNTIME_SHARED_LIBRARY_PATH"
+	envRuntimeHome        = "ONNXRUNTIME_HOME"
+	defaultORTVersion     = "1.25.0"
+	darwinAMD64ORTVersion = "1.23.2"
 )
 
 var (
@@ -157,15 +158,22 @@ func candidateLibraryNames() []string {
 		return []string{
 			"onnxruntime.dylib",
 			"libonnxruntime.dylib",
-			"libonnxruntime." + ortVersion + ".dylib",
+			"libonnxruntime." + runtimeORTVersion() + ".dylib",
 		}
 	default:
 		return []string{
 			"libonnxruntime.so",
-			"libonnxruntime.so." + ortVersion,
+			"libonnxruntime.so." + runtimeORTVersion(),
 			"onnxruntime.so",
 		}
 	}
+}
+
+func runtimeORTVersion() string {
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
+		return darwinAMD64ORTVersion
+	}
+	return defaultORTVersion
 }
 
 func defaultSharedLibraryName() string {
@@ -232,5 +240,5 @@ func runtimeInstallHint() string {
   - export %s=/absolute/path/to/%s
   - export %s=/directory/containing/%s
   - run: go run ./cmd/ortfetch
-`, ortVersion, runtime.GOOS, runtime.GOARCH, envSharedLibraryPath, defaultSharedLibraryName(), envRuntimeHome, defaultSharedLibraryName())
+`, runtimeORTVersion(), runtime.GOOS, runtime.GOARCH, envSharedLibraryPath, defaultSharedLibraryName(), envRuntimeHome, defaultSharedLibraryName())
 }

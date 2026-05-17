@@ -1,5 +1,11 @@
 # goddddocr
 
+[![CI](https://github.com/tensafe/goddddocr/actions/workflows/ci.yml/badge.svg)](https://github.com/tensafe/goddddocr/actions/workflows/ci.yml)
+[![Release](https://github.com/tensafe/goddddocr/actions/workflows/release.yml/badge.svg)](https://github.com/tensafe/goddddocr/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[中文文档](README.zh-CN.md)
+
 Go OCR service/module based on ddddocr ONNX models, without a Python runtime.
 The OCR models and charsets are derived from
 https://github.com/sml2h3/ddddocr.
@@ -33,6 +39,57 @@ On Windows, use PowerShell:
 ```powershell
 .\scripts\smoke.ps1
 ```
+
+## Release Packages
+
+GitHub Releases use `v1.x.x` SemVer tags. Each release archive contains the
+server and helper binaries, the matching ONNX Runtime shared library, smoke
+scripts, sample images, English and Chinese docs, `LICENSE`, and `NOTICE`.
+Releases also publish `goddddocr-onnxruntime-v1.x.x.tar.gz`, an optional
+all-platform ONNX Runtime bundle with Windows Visual C++ Redistributable
+installers for offline redistribution.
+
+Download the archive that matches the deployment host:
+
+| Target | GitHub runner | Archive | ONNX Runtime | Runtime library |
+|---|---|---|---|---|
+| `linux/amd64` | `ubuntu-24.04` | `.tar.gz` | `1.25.0` | `libonnxruntime.so` |
+| `linux/arm64` | `ubuntu-24.04-arm` | `.tar.gz` | `1.25.0` | `libonnxruntime.so` |
+| `darwin/amd64` | `macos-15-intel` | `.tar.gz` | `1.23.2` | `onnxruntime.dylib` |
+| `darwin/arm64` | `macos-15` | `.tar.gz` | `1.25.0` | `onnxruntime.dylib` |
+| `windows/amd64` | `windows-2025` | `.zip` | `1.25.0` | `onnxruntime.dll` |
+| `windows/arm64` | `windows-11-arm` | `.zip` | `1.25.0` | `onnxruntime.dll` |
+
+macOS Intel (`darwin/amd64`) uses ONNX Runtime `1.23.2` because the official
+`1.25.0` release no longer publishes a macOS amd64 CPU archive.
+
+Linux and macOS:
+
+```bash
+tar -xzf goddddocr-v1.0.0-linux-amd64.tar.gz
+cd goddddocr-v1.0.0-linux-amd64
+scripts/smoke.sh
+./goddddocr-server -addr :8088
+```
+
+Windows PowerShell:
+
+```powershell
+Expand-Archive .\goddddocr-v1.0.0-windows-amd64.zip
+cd .\goddddocr-v1.0.0-windows-amd64\goddddocr-v1.0.0-windows-amd64
+.\scripts\smoke.ps1
+.\goddddocr-server.exe -addr :8088
+```
+
+Windows packages include `onnxruntime.dll`, but the DLL imports the Microsoft
+Visual C++ runtime (`MSVCP140.dll`, `VCRUNTIME140.dll`,
+`VCRUNTIME140_1.dll`, and UCRT API-set DLLs). Windows release packages include
+the matching Microsoft Visual C++ Redistributable installer under
+`redist/windows/`; run it only when the target host does not already have the
+runtime:
+
+- `windows/amd64`: `redist/windows/vc_redist.x64.exe`
+- `windows/arm64`: `redist/windows/vc_redist.arm64.exe`
 
 ## Go Client
 
@@ -122,7 +179,7 @@ GODDDDOCR_SMOKE_EXPECT=abcd \
 scripts/smoke.sh
 ```
 
-## CI
+## CI And Releases
 
 Linux CI uses the same smoke path intended for release packages:
 
@@ -132,6 +189,34 @@ scripts/ci_linux.sh
 
 The script runs unit tests, builds all commands, installs the current platform
 ONNX Runtime with `cmd/ortfetch`, and then runs `scripts/smoke.sh`.
+
+Build a local release package for the current platform:
+
+```bash
+GODDDDOCR_VERSION=v1.0.0 make package-release
+```
+
+Build the all-platform ONNX Runtime bundle:
+
+```bash
+GODDDDOCR_VERSION=v1.0.0 make package-onnxruntime
+```
+
+Publish an automated GitHub release by pushing a `v1.x.x` tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The `Release` workflow builds Linux `amd64/arm64`, macOS `amd64/arm64`, and
+Windows `amd64/arm64` packages, runs the bundled smoke check, uploads the
+archives, and publishes the all-platform ONNX Runtime bundle plus
+`SHA256SUMS`. The same workflow can be started manually with:
+
+```bash
+gh workflow run release.yml -f version=v1.0.0
+```
 
 Docker smoke is available as a manual GitHub Actions workflow named
 `Docker Smoke`. It builds the service image for `linux/amd64` or `linux/arm64`,
@@ -392,9 +477,15 @@ Or install for another target:
 
 ```bash
 go run ./cmd/ortfetch -goos linux -goarch amd64
+go run ./cmd/ortfetch -goos linux -goarch arm64
 go run ./cmd/ortfetch -goos windows -goarch amd64
+go run ./cmd/ortfetch -goos windows -goarch arm64
+go run ./cmd/ortfetch -goos darwin -goarch amd64
 go run ./cmd/ortfetch -goos darwin -goarch arm64
 ```
+
+`cmd/ortfetch` uses target-specific defaults: `darwin/amd64` downloads ONNX
+Runtime `1.23.2`; all other bundled targets download `1.25.0`.
 
 Manual setup also works:
 
@@ -408,7 +499,10 @@ Windows uses `onnxruntime.dll`; macOS uses `libonnxruntime.dylib` or
 Because `github.com/yalue/onnxruntime_go` uses cgo, build on the target system
 or install the matching cross C compiler:
 
-- Windows: MSYS2/mingw-w64 or build natively on Windows.
+- Windows: MSYS2/mingw-w64 or build natively on Windows. Release builds use
+  static MinGW runtime linking for the Go binaries, but `onnxruntime.dll` still
+  may require the bundled Microsoft Visual C++ Redistributable on the target
+  host.
 - Linux: build natively or use a Linux cross compiler/container.
 - macOS: Xcode command line tools.
 
@@ -577,3 +671,9 @@ GODDDDOCR_PREP_MAX_RMSE=0.02 \
 - Detection: module and HTTP API implemented.
 - Slide comparison: module and HTTP API implemented.
 - Slide matching: module and HTTP API implemented.
+
+## License
+
+goddddocr is released under the MIT License. Model and charset assets derived
+from ddddocr are tracked in `NOTICE`; keep that notice with source and binary
+redistributions.

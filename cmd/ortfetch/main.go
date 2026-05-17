@@ -13,9 +13,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
-const defaultVersion = "1.25.0"
+const (
+	defaultVersion      = "1.25.0"
+	darwinAMD64Version  = "1.23.2"
+	maxDownloadAttempts = 3
+)
 
 type target struct {
 	GOOS       string
@@ -28,11 +33,16 @@ type target struct {
 }
 
 func main() {
-	version := flag.String("version", defaultVersion, "ONNX Runtime version")
+	version := flag.String("version", "", "ONNX Runtime version; default is target-specific")
 	goos := flag.String("goos", runtime.GOOS, "target GOOS")
 	goarch := flag.String("goarch", runtime.GOARCH, "target GOARCH")
 	outRoot := flag.String("out", "third_party/onnxruntime", "output root directory")
 	flag.Parse()
+
+	runtimeVersion := strings.TrimSpace(*version)
+	if runtimeVersion == "" {
+		runtimeVersion = defaultVersionForTarget(*goos, *goarch)
+	}
 
 	t, err := resolveTarget(*goos, *goarch)
 	if err != nil {
@@ -41,10 +51,10 @@ func main() {
 
 	url := fmt.Sprintf(
 		"https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-%s-%s-%s%s",
-		*version,
+		runtimeVersion,
 		t.AssetOS,
 		t.AssetArch,
-		*version,
+		runtimeVersion,
 		t.ArchiveExt,
 	)
 
@@ -71,6 +81,13 @@ func main() {
 	}
 
 	log.Printf("installed %s", outPath)
+}
+
+func defaultVersionForTarget(goos, goarch string) string {
+	if goos == "darwin" && goarch == "amd64" {
+		return darwinAMD64Version
+	}
+	return defaultVersion
 }
 
 func resolveTarget(goos, goarch string) (target, error) {
@@ -134,11 +151,30 @@ func resolveTarget(goos, goarch string) (target, error) {
 }
 
 func download(url string) (string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= maxDownloadAttempts; attempt++ {
+		path, err := downloadOnce(url)
+		if err == nil {
+			return path, nil
+		}
+		lastErr = err
+		if attempt == maxDownloadAttempts {
+			break
+		}
+		delay := time.Duration(attempt*2) * time.Second
+		log.Printf("download attempt %d/%d failed: %v; retrying in %s", attempt, maxDownloadAttempts, err, delay)
+		time.Sleep(delay)
+	}
+	return "", lastErr
+}
+
+func downloadOnce(url string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 2 * time.Minute}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}

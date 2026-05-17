@@ -1,0 +1,207 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v1.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="${{ inputs.version }}"
+          fi
+
+          if [[ ! "$version" =~ ^v1\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must match v1.x.x, got: $version" >&2
+            exit 2
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            archive: tar.gz
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            archive: tar.gz
+          - name: darwin-arm64
+            runner: macos-15
+            goos: darwin
+            goarch: arm64
+            archive: tar.gz
+          - name: darwin-amd64
+            runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            archive: tar.gz
+          - name: windows-amd64
+            runner: windows-2025
+            goos: windows
+            goarch: amd64
+            msystem: UCRT64
+            msys_packages: mingw-w64-ucrt-x86_64-gcc
+            cc: gcc
+            archive: zip
+          - name: windows-arm64
+            runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+            msystem: CLANGARM64
+            msys_packages: mingw-w64-clang-aarch64-clang
+            cc: clang
+            archive: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache: true
+
+      - name: Set up Windows cgo compiler
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: ${{ matrix.msys_packages }}
+
+      - name: Build release package
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: scripts/package_release.sh "${{ needs.validate.outputs.version }}"
+
+      - name: Build release package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CC: ${{ matrix.cc }}
+          CGO_ENABLED: "1"
+        run: ./scripts/package_release.ps1 -Version "${{ needs.validate.outputs.version }}" -Goos "${{ matrix.goos }}" -Goarch "${{ matrix.goarch }}"
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: goddddocr-${{ needs.validate.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/goddddocr-${{ needs.validate.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.archive }}
+          if-no-files-found: error
+
+  runtimes:
+    name: Bundle all ONNX Runtime libraries
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache: true
+
+      - name: Build ONNX Runtime bundle
+        shell: bash
+        run: scripts/package_onnxruntime.sh "${{ needs.validate.outputs.version }}"
+
+      - name: Upload ONNX Runtime bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: goddddocr-onnxruntime-${{ needs.validate.outputs.version }}
+          path: dist/goddddocr-onnxruntime-${{ needs.validate.outputs.version }}.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs:
+      - validate
+      - build
+      - runtimes
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          merge-multiple: true
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd dist/release
+          sha256sum * > SHA256SUMS
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          Automated goddddocr release.
+
+          Assets include:
+          - server and helper binaries
+          - matching ONNX Runtime shared library
+          - an optional all-platform ONNX Runtime bundle
+          - Windows Visual C++ Redistributable installers
+          - smoke-test scripts and bundled sample images
+          - English and Chinese docs, LICENSE, and NOTICE
+
+          Download the archive for your OS/architecture, extract it, then run the bundled smoke script before deployment.
+          EOF
+
+      - name: Publish release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/release/* --clobber
+          else
+            gh release create "$VERSION" dist/release/* \
+              --title "goddddocr $VERSION" \
+              --notes-file RELEASE_NOTES.md \
+              --target "$GITHUB_SHA"
+          fi

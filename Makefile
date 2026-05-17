@@ -1,4 +1,4 @@
-.PHONY: test server ort doctor smoke docker-smoke bench-workers eval-samples prep-sample python-prep-reference python-feature-reference prep-compare
+.PHONY: test server ort doctor smoke package-release package-onnxruntime docker-smoke bench-workers eval-samples prep-sample python-prep-reference python-feature-reference prep-compare
 
 test:
 	go test ./...
@@ -14,6 +14,14 @@ doctor:
 
 smoke:
 	scripts/smoke.sh
+
+package-release:
+	@if [ -z "$(GODDDDOCR_VERSION)" ]; then echo "set GODDDDOCR_VERSION=v1.x.x"; exit 2; fi
+	scripts/package_release.sh "$(GODDDDOCR_VERSION)"
+
+package-onnxruntime:
+	@if [ -z "$(GODDDDOCR_VERSION)" ]; then echo "set GODDDDOCR_VERSION=v1.x.x"; exit 2; fi
+	scripts/package_onnxruntime.sh "$(GODDDDOCR_VERSION)"
 
 docker-smoke:
 	scripts/docker_smoke.sh
