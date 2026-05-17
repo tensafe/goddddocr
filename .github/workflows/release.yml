@@ -73,6 +73,7 @@ jobs:
             goarch: amd64
             msystem: UCRT64
             msys_packages: mingw-w64-ucrt-x86_64-gcc zip curl
+            cc: gcc
             archive: zip
           - name: windows-arm64
             runner: windows-11-arm
@@ -80,6 +81,7 @@ jobs:
             goarch: arm64
             msystem: CLANGARM64
             msys_packages: mingw-w64-clang-aarch64-clang zip curl
+            cc: clang
             archive: zip
 
     steps:
@@ -116,6 +118,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "1"
+          CC: ${{ matrix.cc }}
         run: scripts/package_release.sh "${{ needs.validate.outputs.version }}"
 
       - name: Upload release package
