@@ -72,16 +72,14 @@ jobs:
             goos: windows
             goarch: amd64
             msystem: UCRT64
-            msys_packages: mingw-w64-ucrt-x86_64-gcc
-            cc: gcc
+            msys_packages: mingw-w64-ucrt-x86_64-gcc zip curl
             archive: zip
           - name: windows-arm64
             runner: windows-11-arm
             goos: windows
             goarch: arm64
             msystem: CLANGARM64
-            msys_packages: mingw-w64-clang-aarch64-clang
-            cc: clang
+            msys_packages: mingw-w64-clang-aarch64-clang zip curl
             archive: zip
 
     steps:
@@ -100,6 +98,7 @@ jobs:
         with:
           msystem: ${{ matrix.msystem }}
           update: true
+          path-type: inherit
           install: ${{ matrix.msys_packages }}
 
       - name: Build release package
@@ -112,11 +111,12 @@ jobs:
 
       - name: Build release package
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: msys2 {0}
         env:
-          CC: ${{ matrix.cc }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "1"
-        run: ./scripts/package_release.ps1 -Version "${{ needs.validate.outputs.version }}" -Goos "${{ matrix.goos }}" -Goarch "${{ matrix.goarch }}"
+        run: scripts/package_release.sh "${{ needs.validate.outputs.version }}"
 
       - name: Upload release package
         uses: actions/upload-artifact@v4

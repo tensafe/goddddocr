@@ -43,6 +43,14 @@ $previousCgoEnabled = $env:CGO_ENABLED
 $previousGoos = $env:GOOS
 $previousGoarch = $env:GOARCH
 
+function Assert-LastExitCode {
+    param([string]$Description)
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE"
+    }
+}
+
 Push-Location $rootDir
 try {
     $env:CGO_ENABLED = $(if ($env:CGO_ENABLED) { $env:CGO_ENABLED } else { "1" })
@@ -54,6 +62,7 @@ try {
     foreach ($command in $commands) {
         $output = Join-Path $packageDir "$command.exe"
         & go build -trimpath -ldflags $ldflags -o $output "./cmd/$command"
+        Assert-LastExitCode "go build ./cmd/$command"
     }
 
     if ($null -eq $previousGoos) {
@@ -68,6 +77,7 @@ try {
     }
 
     & go run ./cmd/ortfetch -goos $Goos -goarch $Goarch -out (Join-Path $packageDir "third_party/onnxruntime")
+    Assert-LastExitCode "go run ./cmd/ortfetch"
 
     $redistDir = Join-Path $packageDir "redist/windows"
     New-Item -ItemType Directory -Force -Path $redistDir | Out-Null
@@ -84,6 +94,7 @@ try {
 
     if ($env:GODDDDOCR_SKIP_PACKAGE_SMOKE -ne "1") {
         & (Join-Path $packageDir "scripts/smoke.ps1")
+        Assert-LastExitCode "scripts/smoke.ps1"
     }
 
     Compress-Archive -Path $packageDir -DestinationPath $archivePath -Force
