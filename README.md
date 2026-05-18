@@ -40,11 +40,30 @@ On Windows, use PowerShell:
 .\scripts\smoke.ps1
 ```
 
+The default OCR models, detection model, and charsets are embedded into the Go
+binaries with `go:embed`. Release users do not need to download separate model
+files unless they intentionally pass custom `-model-path`, `-charset-path`, or
+`-det-model-path` values.
+
+Linux and macOS can install and start the latest release in one step:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tensafe/goddddocr/main/scripts/install_run.sh | sh
+```
+
+Pin a release or pass server flags when needed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tensafe/goddddocr/main/scripts/install_run.sh \
+  | GODDDDOCR_VERSION=v1.0.1 sh -s -- -addr :8088 -workers 2
+```
+
 ## Release Packages
 
 GitHub Releases use `v1.x.x` SemVer tags. Each release archive contains the
-server and helper binaries, the matching ONNX Runtime shared library, smoke
-scripts, sample images, English and Chinese docs, `LICENSE`, and `NOTICE`.
+server and helper binaries, embedded models/charsets inside those binaries, the
+matching ONNX Runtime shared library, one-click run scripts, smoke scripts,
+sample images, English and Chinese docs, `LICENSE`, and `NOTICE`.
 Releases also publish `goddddocr-onnxruntime-v1.x.x.tar.gz`, an optional
 all-platform ONNX Runtime bundle with Windows Visual C++ Redistributable
 installers for offline redistribution.
@@ -66,17 +85,19 @@ macOS Intel (`darwin/amd64`) uses ONNX Runtime `1.23.2` because the official
 Linux and macOS:
 
 ```bash
-tar -xzf goddddocr-v1.0.0-linux-amd64.tar.gz
-cd goddddocr-v1.0.0-linux-amd64
+tar -xzf goddddocr-v1.0.1-linux-amd64.tar.gz
+cd goddddocr-v1.0.1-linux-amd64
 scripts/smoke.sh
 ./goddddocr-server -addr :8088
+# or:
+scripts/run.sh -addr :8088
 ```
 
 Windows PowerShell:
 
 ```powershell
-Expand-Archive .\goddddocr-v1.0.0-windows-amd64.zip
-cd .\goddddocr-v1.0.0-windows-amd64\goddddocr-v1.0.0-windows-amd64
+Expand-Archive .\goddddocr-v1.0.1-windows-amd64.zip
+cd .\goddddocr-v1.0.1-windows-amd64\goddddocr-v1.0.1-windows-amd64
 .\scripts\smoke.ps1
 .\goddddocr-server.exe -addr :8088
 ```
@@ -193,20 +214,20 @@ ONNX Runtime with `cmd/ortfetch`, and then runs `scripts/smoke.sh`.
 Build a local release package for the current platform:
 
 ```bash
-GODDDDOCR_VERSION=v1.0.0 make package-release
+GODDDDOCR_VERSION=v1.0.1 make package-release
 ```
 
 Build the all-platform ONNX Runtime bundle:
 
 ```bash
-GODDDDOCR_VERSION=v1.0.0 make package-onnxruntime
+GODDDDOCR_VERSION=v1.0.1 make package-onnxruntime
 ```
 
 Publish an automated GitHub release by pushing a `v1.x.x` tag:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 The `Release` workflow builds Linux `amd64/arm64`, macOS `amd64/arm64`, and
@@ -215,7 +236,7 @@ archives, and publishes the all-platform ONNX Runtime bundle plus
 `SHA256SUMS`. The same workflow can be started manually with:
 
 ```bash
-gh workflow run release.yml -f version=v1.0.0
+gh workflow run release.yml -f version=v1.0.1
 ```
 
 Docker smoke is available as a manual GitHub Actions workflow named

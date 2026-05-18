@@ -78,8 +78,8 @@ fi
 
 cp README.md README.zh-CN.md LICENSE NOTICE "$package_dir/"
 cp -R docs/zh-CN "$package_dir/docs/"
-cp scripts/smoke.sh scripts/smoke.ps1 "$package_dir/scripts/"
-chmod +x "$package_dir/scripts/smoke.sh"
+cp scripts/install_run.sh scripts/run.sh scripts/smoke.sh scripts/smoke.ps1 "$package_dir/scripts/"
+chmod +x "$package_dir/scripts/install_run.sh" "$package_dir/scripts/run.sh" "$package_dir/scripts/smoke.sh"
 cp samples/yzm1.png samples/yzm2.jpeg "$package_dir/samples/"
 
 if [ "${GODDDDOCR_SKIP_PACKAGE_SMOKE:-}" != "1" ] && [ "$goos" != "windows" ]; then

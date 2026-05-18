@@ -34,11 +34,29 @@ Windows 使用 PowerShell：
 .\scripts\smoke.ps1
 ```
 
+默认 OCR 模型、检测模型和字符集已经通过 `go:embed` 内置到 Go 二进制里。
+使用发行包时不需要额外下载模型文件；只有在主动使用自定义 `-model-path`、
+`-charset-path` 或 `-det-model-path` 时，才需要提供外部模型资产。
+
+Linux 和 macOS 可以一条命令安装并启动最新版：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tensafe/goddddocr/main/scripts/install_run.sh | sh
+```
+
+也可以指定版本或追加服务参数：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tensafe/goddddocr/main/scripts/install_run.sh \
+  | GODDDDOCR_VERSION=v1.0.1 sh -s -- -addr :8088 -workers 2
+```
+
 ## 下载发行包
 
 GitHub Releases 使用 `v1.x.x` 版本标签。每个发行包包含服务端二进制、
-辅助命令、对应平台的 ONNX Runtime 动态库、自检脚本、样例图片、英文/中文
-文档、`LICENSE` 和 `NOTICE`。Release 页面还会额外发布
+辅助命令、已内置在二进制里的模型/字符集、对应平台的 ONNX Runtime 动态库、
+一键运行脚本、自检脚本、样例图片、英文/中文文档、`LICENSE` 和 `NOTICE`。
+Release 页面还会额外发布
 `goddddocr-onnxruntime-v1.x.x.tar.gz`，里面包含全部支持平台的 ONNX Runtime
 动态库和 Windows Visual C++ Redistributable 安装器，适合离线分发或统一归档。
 
@@ -57,17 +75,19 @@ macOS Intel (`darwin/amd64`) 使用 ONNX Runtime `1.23.2`，因为官方 `1.25.0
 Linux 和 macOS：
 
 ```bash
-tar -xzf goddddocr-v1.0.0-linux-amd64.tar.gz
-cd goddddocr-v1.0.0-linux-amd64
+tar -xzf goddddocr-v1.0.1-linux-amd64.tar.gz
+cd goddddocr-v1.0.1-linux-amd64
 scripts/smoke.sh
 ./goddddocr-server -addr :8088
+# 或：
+scripts/run.sh -addr :8088
 ```
 
 Windows PowerShell：
 
 ```powershell
-Expand-Archive .\goddddocr-v1.0.0-windows-amd64.zip
-cd .\goddddocr-v1.0.0-windows-amd64\goddddocr-v1.0.0-windows-amd64
+Expand-Archive .\goddddocr-v1.0.1-windows-amd64.zip
+cd .\goddddocr-v1.0.1-windows-amd64\goddddocr-v1.0.1-windows-amd64
 .\scripts\smoke.ps1
 .\goddddocr-server.exe -addr :8088
 ```
@@ -210,13 +230,13 @@ scripts/ci_linux.sh
 本地打包当前平台：
 
 ```bash
-GODDDDOCR_VERSION=v1.0.0 make package-release
+GODDDDOCR_VERSION=v1.0.1 make package-release
 ```
 
 本地打包全部平台的 ONNX Runtime：
 
 ```bash
-GODDDDOCR_VERSION=v1.0.0 make package-onnxruntime
+GODDDDOCR_VERSION=v1.0.1 make package-onnxruntime
 ```
 
 推送 `v1.x.x` tag 后，GitHub Actions 会自动构建 Linux `amd64/arm64`、
@@ -224,14 +244,14 @@ macOS `amd64/arm64`、Windows `amd64/arm64` 发行包，同时生成全量 ONNX
 Runtime 包和 `SHA256SUMS`，并发布到 GitHub Release：
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 也可以手动触发：
 
 ```bash
-gh workflow run release.yml -f version=v1.0.0
+gh workflow run release.yml -f version=v1.0.1
 ```
 
 ## Docker

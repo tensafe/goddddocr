@@ -89,7 +89,7 @@ try {
 
     Copy-Item -Path README.md, README.zh-CN.md, LICENSE, NOTICE -Destination $packageDir
     Copy-Item -Recurse -Path docs/zh-CN -Destination (Join-Path $packageDir "docs")
-    Copy-Item -Path scripts/smoke.sh, scripts/smoke.ps1 -Destination (Join-Path $packageDir "scripts")
+    Copy-Item -Path scripts/install_run.sh, scripts/run.sh, scripts/smoke.sh, scripts/smoke.ps1 -Destination (Join-Path $packageDir "scripts")
     Copy-Item -Path samples/yzm1.png, samples/yzm2.jpeg -Destination (Join-Path $packageDir "samples")
 
     if ($env:GODDDDOCR_SKIP_PACKAGE_SMOKE -ne "1") {
